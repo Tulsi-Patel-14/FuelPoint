@@ -1,3 +1,4 @@
+import { Link } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 import type { ReactNode } from "react";
@@ -32,6 +33,7 @@ export function StatCard({
   delta,
   hint,
   tone = "primary",
+  to,
 }: {
   label: string;
   value: string | number;
@@ -39,6 +41,7 @@ export function StatCard({
   delta?: number;
   hint?: string;
   tone?: "primary" | "teal" | "navy" | "warning";
+  to?: string;
 }) {
   const tones = {
     primary: "bg-primary/10 text-primary",
@@ -47,8 +50,13 @@ export function StatCard({
     warning: "bg-warning/15 text-warning-foreground",
   } as const;
 
-  return (
-    <div className="surface-card flex h-full flex-col justify-between p-5 transition-all duration-200 hover:shadow-elevated">
+  const content = (
+    <div
+      className={cn(
+        "surface-card flex h-full flex-col justify-between p-5 transition-all duration-200 hover:shadow-elevated",
+        to && "cursor-pointer hover:border-primary/40 hover:bg-muted/30"
+      )}
+    >
       <div>
         <div className="flex items-start justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -87,6 +95,19 @@ export function StatCard({
       </div>
     </div>
   );
+
+  if (to) {
+    return (
+      <Link
+        to={to as any}
+        className="block h-full outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 rounded-xl"
+      >
+        {content}
+      </Link>
+    );
+  }
+
+  return content;
 }
 
 export function Panel({

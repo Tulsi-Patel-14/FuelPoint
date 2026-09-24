@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { Activity, BadgePercent, Search, UserCheck, Wrench } from "lucide-react";
+import { Activity, BadgePercent, Search, UserCheck, Wrench, Pencil, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { HorizontalBarChart } from "@/components/admin/charts";
 import { Column, DataTable } from "@/components/admin/DataTable";
 import { PageHeader, Panel, StatCard, StatusBadge } from "@/components/admin/primitives";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Dialog,
   DialogContent,
@@ -12,7 +13,18 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -49,11 +61,14 @@ export const Route = createFileRoute("/_admin/workers")({
 });
 
 function WorkersPage() {
-  const { workers, transactions } = useAdmin();
+  const { workers, transactions, updateWorker, deleteWorker } = useAdmin();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [shift, setShift] = useState("all");
   const [selected, setSelected] = useState<Worker | null>(null);
+  
+  const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
+  const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
 
   const filtered = useMemo(
     () =>
@@ -156,6 +171,31 @@ function WorkersPage() {
       sortValue: (w) => w.lastActivity,
       render: (w) => (
         <span className="text-xs text-muted-foreground">{relativeDays(w.lastActivity)}</span>
+      ),
+    },
+    {
+      key: "actions",
+      header: "",
+      align: "right",
+      render: (w) => (
+        <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8"
+            onClick={() => setEditingWorker(w)}
+          >
+            <Pencil className="size-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
+            onClick={() => setDeletingWorker(w)}
+          >
+            <Trash2 className="size-4" />
+          </Button>
+        </div>
       ),
     },
   ];
@@ -298,7 +338,7 @@ function WorkersPage() {
                 <p className="border-b border-border px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase">
                   Recent activity
                 </p>
-                <ul className="max-h-64 divide-y divide-border overflow-y-auto">
+                <ul className="scrollbar-thin max-h-64 divide-y divide-border overflow-y-auto">
                   {workerTxns.map((t) => (
                     <li
                       key={t.id}
@@ -328,14 +368,131 @@ function WorkersPage() {
 
               <div className="flex items-center justify-between gap-3">
                 <StatusBadge status={selected.status} />
-                <Button variant="outline" onClick={() => setSelected(null)}>
-                  Close
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      setDeletingWorker(selected);
+                      setSelected(null);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setEditingWorker(selected);
+                      setSelected(null);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button variant="default" onClick={() => setSelected(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Worker Dialog */}
+      <Dialog open={!!editingWorker} onOpenChange={(o) => !o && setEditingWorker(null)}>
+        <DialogContent className="sm:max-w-md">
+          {editingWorker && (
+            <>
+              <DialogHeader>
+                <DialogTitle>Edit Worker</DialogTitle>
+                <DialogDescription>
+                  Update basic info and shift assignment.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="w-name">Full name</Label>
+                  <Input
+                    id="w-name"
+                    value={editingWorker.name}
+                    onChange={(e) => setEditingWorker({ ...editingWorker, name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="w-email">Email</Label>
+                  <Input
+                    id="w-email"
+                    type="email"
+                    value={editingWorker.email}
+                    onChange={(e) => setEditingWorker({ ...editingWorker, email: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Shift</Label>
+                  <Select
+                    value={editingWorker.shift}
+                    onValueChange={(v: "Morning" | "Evening" | "Night") => setEditingWorker({ ...editingWorker, shift: v })}
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Morning">Morning</SelectItem>
+                      <SelectItem value="Evening">Evening</SelectItem>
+                      <SelectItem value="Night">Night</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="mt-6 flex justify-end gap-3">
+                <Button variant="outline" onClick={() => setEditingWorker(null)}>
+                  Cancel
+                </Button>
+                <Button
+                  onClick={() => {
+                    if (!editingWorker.name.trim() || !editingWorker.email.trim()) {
+                      toast.error("Name and email are required.");
+                      return;
+                    }
+                    updateWorker(editingWorker);
+                    toast.success("Worker updated");
+                    setEditingWorker(null);
+                  }}
+                >
+                  Save changes
                 </Button>
               </div>
             </>
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Worker Alert */}
+      <AlertDialog open={!!deletingWorker} onOpenChange={(o) => !o && setDeletingWorker(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently remove the worker profile for{" "}
+              <span className="font-semibold text-foreground">{deletingWorker?.name}</span>.
+              They will no longer be able to log in or process scans.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              onClick={() => {
+                if (deletingWorker) {
+                  deleteWorker(deletingWorker.id);
+                  toast.success("Worker deleted");
+                  setDeletingWorker(null);
+                }
+              }}
+            >
+              Delete worker
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -2,7 +2,6 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { DonutChart, HorizontalBarChart, TrendAreaChart } from "@/components/admin/charts";
 import { TablePagination } from "@/components/admin/DataTable";
 import { PageHeader, Panel, StatusBadge } from "@/components/admin/primitives";
 import { Button } from "@/components/ui/button";
@@ -68,13 +67,17 @@ function ReportsPage() {
   const [to, setTo] = useState("2026-09-23");
   const [category, setCategory] = useState<Category>("transactions");
   const [customersPage, setCustomersPage] = useState(1);
+  const [customersPageSize, setCustomersPageSize] = useState(10);
   const [transactionsPage, setTransactionsPage] = useState(1);
-  const pageSize = 10;
+  const [transactionsPageSize, setTransactionsPageSize] = useState(10);
 
   useEffect(() => {
     setCustomersPage(1);
+  }, [range, from, to, customersPageSize]);
+
+  useEffect(() => {
     setTransactionsPage(1);
-  }, [range, from, to]);
+  }, [range, from, to, transactionsPageSize]);
 
   const bounds = useMemo(() => rangeBounds(range, from, to), [range, from, to]);
   const txns = useMemo(
@@ -95,18 +98,18 @@ function ReportsPage() {
   );
   const dist = useMemo(() => groupDistribution(customers, groups, txns), [customers, groups, txns]);
 
-  const totalTxnPages = Math.max(1, Math.ceil(txns.length / pageSize));
+  const totalTxnPages = Math.max(1, Math.ceil(txns.length / transactionsPageSize));
   const safeTxnPage = Math.min(transactionsPage, totalTxnPages);
   const pagedTxns = useMemo(
-    () => txns.slice((safeTxnPage - 1) * pageSize, safeTxnPage * pageSize),
-    [txns, safeTxnPage, pageSize],
+    () => txns.slice((safeTxnPage - 1) * transactionsPageSize, safeTxnPage * transactionsPageSize),
+    [txns, safeTxnPage, transactionsPageSize],
   );
 
-  const totalRegPages = Math.max(1, Math.ceil(regs.length / pageSize));
+  const totalRegPages = Math.max(1, Math.ceil(regs.length / customersPageSize));
   const safeRegPage = Math.min(customersPage, totalRegPages);
   const pagedRegs = useMemo(
-    () => regs.slice((safeRegPage - 1) * pageSize, safeRegPage * pageSize),
-    [regs, safeRegPage, pageSize],
+    () => regs.slice((safeRegPage - 1) * customersPageSize, safeRegPage * customersPageSize),
+    [regs, safeRegPage, customersPageSize],
   );
 
   const discountTotal = txns.reduce((s, t) => s + t.discountAmount, 0);
@@ -223,7 +226,26 @@ function ReportsPage() {
         }
       />
 
-      <div className="surface-card flex flex-wrap items-end gap-3 p-4">
+      <Tabs value={category} onValueChange={(v) => setCategory(v as Category)}>
+        <TabsList>
+          {categories.map((c) => (
+            <TabsTrigger key={c.key} value={c.key}>
+              {c.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+      </Tabs>
+
+      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+        {summary.map(([l, v]) => (
+          <div key={l} className="surface-card p-4">
+            <p className="text-xs text-muted-foreground">{l}</p>
+            <p className="mt-1 text-xl font-bold text-foreground">{v}</p>
+          </div>
+        ))}
+      </div>
+
+      <div className="surface-card mt-6 flex flex-wrap items-end gap-3 p-4">
         <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border p-1">
           {rangeOptions.map((r) => (
             <button
@@ -271,64 +293,6 @@ function ReportsPage() {
           {formatDate(bounds.start.toISOString())} → {formatDate(bounds.end.toISOString())} ·{" "}
           {formatNumber(txns.length)} scans in range
         </p>
-      </div>
-
-      <Tabs value={category} onValueChange={(v) => setCategory(v as Category)} className="mt-4">
-        <TabsList>
-          {categories.map((c) => (
-            <TabsTrigger key={c.key} value={c.key}>
-              {c.label}
-            </TabsTrigger>
-          ))}
-        </TabsList>
-      </Tabs>
-
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
-        {summary.map(([l, v]) => (
-          <div key={l} className="surface-card p-4">
-            <p className="text-xs text-muted-foreground">{l}</p>
-            <p className="mt-1 text-xl font-bold text-foreground">{v}</p>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-4 grid gap-4 lg:grid-cols-3">
-        <Panel
-          title={category === "customers" ? "Registrations trend" : "Activity trend"}
-          description="Daily movement inside the selected range"
-          className="lg:col-span-2"
-        >
-          <TrendAreaChart
-            data={series}
-            dataKey={
-              category === "customers"
-                ? "registrations"
-                : category === "discount"
-                  ? "discount"
-                  : "transactions"
-            }
-            color={category === "discount" ? "var(--teal)" : "var(--primary)"}
-            valueFormatter={category === "discount" ? formatCurrency : undefined}
-          />
-        </Panel>
-        <Panel
-          title={category === "workers" ? "Scans by worker" : "Group distribution"}
-          description={category === "workers" ? "Volume per worker" : "Customers per group"}
-        >
-          {category === "workers" ? (
-            <HorizontalBarChart
-              data={workers.map((w) => ({ name: w.name.split(" ")[0], scans: w.scans }))}
-              dataKey="scans"
-              height={280}
-            />
-          ) : (
-            <DonutChart
-              data={dist
-                .filter((g) => g.customers > 0)
-                .map((g) => ({ name: g.name, value: g.customers }))}
-            />
-          )}
-        </Panel>
       </div>
 
       <Panel
@@ -456,10 +420,11 @@ function ReportsPage() {
               <TablePagination
                 currentPage={safeRegPage}
                 totalPages={totalRegPages}
-                pageSize={pageSize}
+                pageSize={customersPageSize}
                 totalItems={regs.length}
                 currentCount={pagedRegs.length}
                 onPageChange={setCustomersPage}
+                onPageSizeChange={setCustomersPageSize}
               />
             </div>
           )}
@@ -517,10 +482,11 @@ function ReportsPage() {
               <TablePagination
                 currentPage={safeTxnPage}
                 totalPages={totalTxnPages}
-                pageSize={pageSize}
+                pageSize={transactionsPageSize}
                 totalItems={txns.length}
                 currentCount={pagedTxns.length}
                 onPageChange={setTransactionsPage}
+                onPageSizeChange={setTransactionsPageSize}
               />
             </div>
           )}

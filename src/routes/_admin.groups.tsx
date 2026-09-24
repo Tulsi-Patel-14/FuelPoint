@@ -120,8 +120,46 @@ function GroupsPage() {
         />
       </div>
 
+      {/* Group Analytics Section */}
+      <div className="mt-8">
+        <div className="mb-4">
+          <h2 className="text-lg font-semibold tracking-tight text-foreground">Group analytics</h2>
+          <p className="text-xs text-muted-foreground">
+            Customer distribution and discount generation across groups
+          </p>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-2">
+          <Panel
+            title="Customer distribution"
+            description="Share of registered customers across groups"
+          >
+            <DonutChart
+              data={stats
+                .filter((g) => g.customers > 0)
+                .map((g) => ({ name: g.name, value: g.customers }))}
+              height={320}
+            />
+          </Panel>
+          <Panel title="Discount contribution" description="Total discount generated per group">
+            <HorizontalBarChart
+              data={stats
+                .slice()
+                .sort((a, b) => b.discountGenerated - a.discountGenerated)
+                .map((g) => ({ name: g.name, discount: g.discountGenerated }))}
+              dataKey="discount"
+              height={320}
+              color="var(--teal)"
+              valueFormatter={formatCurrency}
+              yAxisWidth={110}
+              showLabels
+            />
+          </Panel>
+        </div>
+      </div>
+
       {/* Full-width Group Management */}
-      <div className="mt-6 space-y-4">
+      <div className="mt-8 space-y-4">
         {stats.map((g) => {
           const group = groups.find((x) => x.id === g.id)!;
           return (
@@ -213,44 +251,6 @@ function GroupsPage() {
             </div>
           );
         })}
-      </div>
-
-      {/* Group Analytics Section */}
-      <div className="mt-8">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Group analytics</h2>
-          <p className="text-xs text-muted-foreground">
-            Customer distribution and discount generation across groups
-          </p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Panel
-            title="Customer distribution"
-            description="Share of registered customers across groups"
-          >
-            <DonutChart
-              data={stats
-                .filter((g) => g.customers > 0)
-                .map((g) => ({ name: g.name, value: g.customers }))}
-              height={320}
-            />
-          </Panel>
-          <Panel title="Discount contribution" description="Total discount generated per group">
-            <HorizontalBarChart
-              data={stats
-                .slice()
-                .sort((a, b) => b.discountGenerated - a.discountGenerated)
-                .map((g) => ({ name: g.name, discount: g.discountGenerated }))}
-              dataKey="discount"
-              height={320}
-              color="var(--teal)"
-              valueFormatter={formatCurrency}
-              yAxisWidth={110}
-              showLabels
-            />
-          </Panel>
-        </div>
       </div>
 
       {/* Create / edit */}

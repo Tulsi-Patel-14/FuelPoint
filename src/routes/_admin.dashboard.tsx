@@ -13,7 +13,6 @@ import { useMemo, useState } from "react";
 import {
   DonutChart,
   HorizontalBarChart,
-  MultiLineChart,
   TrendAreaChart,
 } from "@/components/admin/charts";
 import { PageHeader, Panel, StatCard } from "@/components/admin/primitives";
@@ -111,6 +110,7 @@ function DashboardPage() {
           icon={Users}
           delta={delta("registrations")}
           hint="vs previous period"
+          to="/customers"
         />
         <StatCard
           label="Total workers"
@@ -118,6 +118,7 @@ function DashboardPage() {
           icon={Wrench}
           tone="teal"
           hint={`${overview.activeWorkers} active now`}
+          to="/workers"
         />
         <StatCard
           label="Discount groups"
@@ -125,6 +126,7 @@ function DashboardPage() {
           icon={Tags}
           tone="navy"
           hint={`${overview.unassignedCustomers} unassigned customers`}
+          to="/groups"
         />
         <StatCard
           label="Total scans"
@@ -132,6 +134,7 @@ function DashboardPage() {
           icon={Activity}
           delta={delta("transactions")}
           hint="transactions processed"
+          to="/reports"
         />
         <StatCard
           label="Total discount given"
@@ -140,12 +143,14 @@ function DashboardPage() {
           tone="teal"
           delta={delta("discount")}
           hint={`avg ${overview.avgDiscountPercent.toFixed(2)}% of sales`}
+          to="/reports"
         />
         <StatCard
           label="Today's transactions"
           value={formatNumber(overview.todayTransactions)}
           icon={CalendarClock}
           hint={`${formatCurrency(overview.todayDiscount)} discount today`}
+          to="/reports"
         />
         <StatCard
           label="New registrations"
@@ -153,6 +158,7 @@ function DashboardPage() {
           icon={UserPlus}
           tone="warning"
           hint="last 7 days"
+          to="/customers"
         />
         <StatCard
           label="Customers who fuelled"
@@ -160,6 +166,7 @@ function DashboardPage() {
           icon={TrendingUp}
           tone="navy"
           hint={`${overview.activeCustomers} active customers`}
+          to="/customers"
         />
       </div>
 
@@ -190,36 +197,23 @@ function DashboardPage() {
               valueFormatter={formatCurrency}
             />
           </Panel>
-          <Panel title="Registrations vs scans" description="Customer growth against usage">
-            <MultiLineChart
-              data={series}
-              height={280}
-              series={[
-                { key: "registrations", name: "Registrations", color: "var(--chart-4)" },
-                { key: "transactions", name: "Scans", color: "var(--primary)" },
-              ]}
-            />
-          </Panel>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-5">
           <Panel
             title="Worker scanning activity"
             description="Top performers by scans"
-            className="lg:col-span-2"
           >
             <HorizontalBarChart
               data={activity}
               dataKey="scans"
-              height={320}
+              height={280}
               color="var(--primary)"
             />
           </Panel>
+        </div>
 
+        <div className="grid gap-6">
           <Panel
             title="Recent transactions"
             description="Latest scans processed at the pump"
-            className="lg:col-span-3"
             actions={
               <Button asChild variant="outline" size="sm">
                 <Link to="/reports">View reports</Link>

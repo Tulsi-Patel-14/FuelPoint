@@ -11,6 +11,7 @@ import { adminService, DEFAULT_GROUP_ID } from "@/services/adminService";
 import type { AdminProfile, Customer, Group, Notification, Transaction, Worker } from "@/services/types";
 
 interface AdminState {
+  authReady: boolean;
   authed: boolean;
   login: (email: string, remember?: boolean) => void;
   logout: () => void;
@@ -28,6 +29,10 @@ interface AdminState {
   toggleGroupActive: (groupId: string) => void;
   markRead: (id: string) => void;
   markAllRead: () => void;
+  updateCustomer: (customer: Customer) => void;
+  deleteCustomer: (customerId: string) => void;
+  updateWorker: (worker: Worker) => void;
+  deleteWorker: (workerId: string) => void;
 }
 
 const AdminContext = createContext<AdminState | null>(null);
@@ -35,6 +40,7 @@ const AdminContext = createContext<AdminState | null>(null);
 const AUTH_KEY = "fuelpoint-admin-authed";
 
 export function AdminProvider({ children }: { children: ReactNode }) {
+  const [authReady, setAuthReady] = useState(false);
   const [authed, setAuthed] = useState(false);
   const [profile, setProfile] = useState<AdminProfile>(() => adminService.getProfile());
   const [customers, setCustomers] = useState<Customer[]>(() => adminService.getCustomers());
@@ -42,12 +48,13 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const [notifications, setNotifications] = useState<Notification[]>(() =>
     adminService.getNotifications(),
   );
-  const workers = useMemo(() => adminService.getWorkers(), []);
+  const [workers, setWorkers] = useState<Worker[]>(() => adminService.getWorkers());
   const transactions = useMemo(() => adminService.getTransactions(), []);
 
   // Restore the session after a page refresh (client-side only).
   useEffect(() => {
     if (sessionStorage.getItem(AUTH_KEY) === "1") setAuthed(true);
+    setAuthReady(true);
   }, []);
 
   const login = useCallback((email: string, remember: boolean = true) => {
@@ -109,7 +116,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, active: !g.active } : g)));
   }, []);
 
+  const updateCustomer = useCallback((customer: Customer) => {
+    setCustomers((prev) => prev.map((c) => (c.id === customer.id ? customer : c)));
+  }, []);
+
+  const deleteCustomer = useCallback((customerId: string) => {
+    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+  }, []);
+
+  const updateWorker = useCallback((worker: Worker) => {
+    setWorkers((prev) => prev.map((w) => (w.id === worker.id ? worker : w)));
+  }, []);
+
+  const deleteWorker = useCallback((workerId: string) => {
+    setWorkers((prev) => prev.filter((w) => w.id !== workerId));
+  }, []);
+
   const value: AdminState = {
+    authReady,
     authed,
     login,
     logout,
@@ -128,6 +152,10 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     markRead: (id) =>
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n))),
     markAllRead: () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))),
+    updateCustomer,
+    deleteCustomer,
+    updateWorker,
+    deleteWorker,
   };
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;

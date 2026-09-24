@@ -8,16 +8,16 @@ export const Route = createFileRoute("/_admin")({
 });
 
 function AdminLayout() {
-  const { authed } = useAdmin();
+  const { authed, authReady } = useAdmin();
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!authed) {
+    if (authReady && !authed) {
       navigate({ to: "/", replace: true });
     }
-  }, [authed, navigate]);
+  }, [authReady, authed, navigate]);
 
-  if (!authed) return null;
+  if (!authReady || !authed) return null;
 
   return (
     <AdminShell>
