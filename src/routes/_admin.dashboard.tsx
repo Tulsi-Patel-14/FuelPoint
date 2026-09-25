@@ -19,6 +19,7 @@ import { PageHeader, Panel, StatCard } from "@/components/admin/primitives";
 import { Button } from "@/components/ui/button";
 import { useAdmin } from "@/lib/admin-store";
 import {
+  adminService,
   buildOverview,
   buildSeries,
   formatCurrency,
@@ -56,10 +57,12 @@ function DashboardPage() {
   const { customers, workers, groups, transactions } = useAdmin();
   const [days, setDays] = useState<number>(30);
 
-  const overview = useMemo(
-    () => buildOverview(customers, workers, groups, transactions),
-    [customers, workers, groups, transactions],
-  );
+  const overview = useMemo(() => {
+    const cutoff = adminService.getToday().getTime() - days * 86400000;
+    const periodCustomers = customers.filter(c => new Date(c.registeredAt).getTime() >= cutoff);
+    const periodTransactions = transactions.filter(t => new Date(t.createdAt).getTime() >= cutoff);
+    return buildOverview(periodCustomers, workers, groups, periodTransactions);
+  }, [customers, workers, groups, transactions, days]);
   const series = useMemo(
     () => buildSeries(customers, transactions, days),
     [customers, transactions, days],
@@ -109,7 +112,7 @@ function DashboardPage() {
           value={formatNumber(overview.totalCustomers)}
           icon={Users}
           delta={delta("registrations")}
-          hint="vs previous period"
+          hint="in this period"
           to="/customers"
         />
         <StatCard
@@ -119,22 +122,6 @@ function DashboardPage() {
           tone="teal"
           hint={`${overview.activeWorkers} active now`}
           to="/workers"
-        />
-        <StatCard
-          label="Discount groups"
-          value={formatNumber(overview.totalGroups)}
-          icon={Tags}
-          tone="navy"
-          hint={`${overview.unassignedCustomers} unassigned customers`}
-          to="/groups"
-        />
-        <StatCard
-          label="Total scans"
-          value={formatNumber(overview.totalTransactions)}
-          icon={Activity}
-          delta={delta("transactions")}
-          hint="transactions processed"
-          to="/reports"
         />
         <StatCard
           label="Total discount given"
@@ -152,22 +139,6 @@ function DashboardPage() {
           hint={`${formatCurrency(overview.todayDiscount)} discount today`}
           to="/reports"
         />
-        <StatCard
-          label="New registrations"
-          value={formatNumber(overview.newRegistrations7d)}
-          icon={UserPlus}
-          tone="warning"
-          hint="last 7 days"
-          to="/customers"
-        />
-        <StatCard
-          label="Customers who fuelled"
-          value={formatNumber(overview.usedPumpCustomers)}
-          icon={TrendingUp}
-          tone="navy"
-          hint={`${overview.activeCustomers} active customers`}
-          to="/customers"
-        />
       </div>
 
       <div className="mt-6 space-y-6">
@@ -179,7 +150,15 @@ function DashboardPage() {
           >
             <TrendAreaChart data={series} dataKey="transactions" height={280} />
           </Panel>
-          <Panel title="Group-wise customers" description="Distribution across discount groups">
+          <Panel 
+            title="Group-wise customers" 
+            description="Distribution across discount groups"
+            actions={
+              <div className="flex h-6 items-center rounded bg-muted px-2 text-xs font-semibold text-muted-foreground">
+                {groups.length} groups
+              </div>
+            }
+          >
             <DonutChart
               data={dist.map((g) => ({ name: g.name, value: g.customers }))}
               height={280}

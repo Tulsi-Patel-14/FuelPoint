@@ -24,6 +24,7 @@ export interface Customer {
   totalSpend: number;
   discountReceived: number;
   status: "active" | "inactive" | "pending";
+  password?: string;
 }
 
 export interface Worker {
@@ -31,6 +32,7 @@ export interface Worker {
   name: string;
   email: string;
   phone: string;
+  password?: string;
   shift: "Morning" | "Evening" | "Night";
   status: "active" | "offline" | "suspended";
   joinedAt: string;

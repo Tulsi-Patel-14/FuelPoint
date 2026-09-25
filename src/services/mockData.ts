@@ -38,7 +38,7 @@ const iso = (daysAgo: number, hour = 9, minute = 15) => {
 export const groups: Group[] = [
   {
     id: DEFAULT_GROUP_ID,
-    name: "Default / Unassigned",
+    name: "Default / Customer",
     discountPercent: 0,
     description: "New registrations land here until an admin assigns a group.",
     active: true,

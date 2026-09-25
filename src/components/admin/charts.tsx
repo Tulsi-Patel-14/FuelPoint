@@ -30,8 +30,12 @@ const tooltipStyle = {
     borderRadius: 12,
     border: "1px solid var(--border)",
     background: "var(--card)",
+    color: "var(--foreground)",
     fontSize: 12,
     boxShadow: "var(--shadow-card)",
+  },
+  itemStyle: {
+    color: "var(--foreground)",
   },
 };
 
@@ -191,7 +195,7 @@ const donutColors = [
   "var(--chart-3)",
   "var(--chart-4)",
   "var(--chart-5)",
-  "var(--muted-foreground)",
+  "var(--chart-6)",
 ];
 
 export function DonutChart({

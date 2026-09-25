@@ -37,7 +37,7 @@ export function StatCard({
 }: {
   label: string;
   value: string | number;
-  icon: LucideIcon;
+  icon?: LucideIcon;
   delta?: number;
   hint?: string;
   tone?: "primary" | "teal" | "navy" | "warning";
@@ -47,51 +47,65 @@ export function StatCard({
     primary: "bg-primary/10 text-primary",
     teal: "bg-teal/10 text-teal",
     navy: "bg-navy/8 text-navy",
-    warning: "bg-warning/15 text-warning-foreground",
+    warning: "bg-warning/15 text-warning",
   } as const;
 
   const content = (
     <div
       className={cn(
-        "surface-card flex h-full flex-col justify-between p-5 transition-all duration-200 hover:shadow-elevated",
+        "surface-card flex min-h-[136px] h-full flex-col justify-between p-5 transition-all duration-200 hover:shadow-elevated",
         to && "cursor-pointer hover:border-primary/40 hover:bg-muted/30"
       )}
     >
       <div>
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex min-h-9 items-start justify-between gap-3">
           <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
             {label}
           </p>
-          <span
-            className={cn(
-              "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-border/50",
-              tones[tone],
-            )}
-          >
-            <Icon className="size-[18px]" />
-          </span>
+          {Icon ? (
+            <span
+              className={cn(
+                "flex size-9 shrink-0 items-center justify-center rounded-lg ring-1 ring-border/50",
+                tones[tone],
+              )}
+            >
+              <Icon className="size-[18px]" />
+            </span>
+          ) : (
+            <span className="size-9 shrink-0" />
+          )}
         </div>
         <p className="mt-2 text-2xl font-bold tracking-tight text-foreground sm:text-[28px]">
           {value}
         </p>
       </div>
-      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-border/40 pt-2 text-xs">
-        {delta !== undefined && (
-          <span
-            className={cn(
-              "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold",
-              delta >= 0 ? "bg-success/12 text-success" : "bg-destructive/12 text-destructive",
-            )}
-          >
-            {delta >= 0 ? (
-              <ArrowUpRight className="size-3" />
-            ) : (
-              <ArrowDownRight className="size-3" />
-            )}
-            {Math.abs(delta).toFixed(1)}%
-          </span>
+      
+      <div
+        className={cn(
+          "mt-3 flex min-h-[28px] flex-wrap items-center gap-2 border-t pt-2 text-xs",
+          (delta !== undefined || hint) ? "border-border/40" : "border-transparent"
         )}
-        {hint && <span className="text-muted-foreground">{hint}</span>}
+      >
+        {(delta !== undefined || hint) && (
+          <>
+            {delta !== undefined && (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 font-semibold",
+                  delta >= 0 ? "bg-success/12 text-success" : "bg-destructive/12 text-destructive",
+                )}
+              >
+                {delta >= 0 ? (
+                  <ArrowUpRight className="size-3" />
+                ) : (
+                  <ArrowDownRight className="size-3" />
+                )}
+                {Math.abs(delta).toFixed(1)}%
+              </span>
+            )}
+            {hint && <span className="text-muted-foreground">{hint}</span>}
+          </>
+        )}
       </div>
     </div>
   );
@@ -142,7 +156,7 @@ export function Panel({
 const statusTones: Record<string, string> = {
   active: "bg-success/12 text-success",
   inactive: "bg-muted text-muted-foreground",
-  pending: "bg-warning/18 text-warning-foreground",
+  pending: "bg-warning/18 text-warning",
   offline: "bg-muted text-muted-foreground",
   suspended: "bg-destructive/12 text-destructive",
 };

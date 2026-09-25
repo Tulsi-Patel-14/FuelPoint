@@ -2,8 +2,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Download, FileSpreadsheet } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { TablePagination } from "@/components/admin/DataTable";
-import { PageHeader, Panel, StatusBadge } from "@/components/admin/primitives";
+import { Column, DataTable, TablePagination } from "@/components/admin/DataTable";
+import { PageHeader, Panel, StatCard, StatusBadge } from "@/components/admin/primitives";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -66,18 +66,6 @@ function ReportsPage() {
   const [from, setFrom] = useState("2026-09-01");
   const [to, setTo] = useState("2026-09-23");
   const [category, setCategory] = useState<Category>("transactions");
-  const [customersPage, setCustomersPage] = useState(1);
-  const [customersPageSize, setCustomersPageSize] = useState(10);
-  const [transactionsPage, setTransactionsPage] = useState(1);
-  const [transactionsPageSize, setTransactionsPageSize] = useState(10);
-
-  useEffect(() => {
-    setCustomersPage(1);
-  }, [range, from, to, customersPageSize]);
-
-  useEffect(() => {
-    setTransactionsPage(1);
-  }, [range, from, to, transactionsPageSize]);
 
   const bounds = useMemo(() => rangeBounds(range, from, to), [range, from, to]);
   const txns = useMemo(
@@ -97,20 +85,6 @@ function ReportsPage() {
     [customers, txns, days],
   );
   const dist = useMemo(() => groupDistribution(customers, groups, txns), [customers, groups, txns]);
-
-  const totalTxnPages = Math.max(1, Math.ceil(txns.length / transactionsPageSize));
-  const safeTxnPage = Math.min(transactionsPage, totalTxnPages);
-  const pagedTxns = useMemo(
-    () => txns.slice((safeTxnPage - 1) * transactionsPageSize, safeTxnPage * transactionsPageSize),
-    [txns, safeTxnPage, transactionsPageSize],
-  );
-
-  const totalRegPages = Math.max(1, Math.ceil(regs.length / customersPageSize));
-  const safeRegPage = Math.min(customersPage, totalRegPages);
-  const pagedRegs = useMemo(
-    () => regs.slice((safeRegPage - 1) * customersPageSize, safeRegPage * customersPageSize),
-    [regs, safeRegPage, customersPageSize],
-  );
 
   const discountTotal = txns.reduce((s, t) => s + t.discountAmount, 0);
   const revenueTotal = txns.reduce((s, t) => s + t.amount, 0);
@@ -214,16 +188,6 @@ function ReportsPage() {
       <PageHeader
         title="Reports"
         subtitle="Date-ranged reporting across customers, workers, scans, discounts and groups."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => handleExport("csv")}>
-              <Download className="size-4" /> Export CSV
-            </Button>
-            <Button onClick={() => handleExport("excel")}>
-              <FileSpreadsheet className="size-4" /> Export Excel
-            </Button>
-          </>
-        }
       />
 
       <Tabs value={category} onValueChange={(v) => setCategory(v as Category)}>
@@ -236,259 +200,140 @@ function ReportsPage() {
         </TabsList>
       </Tabs>
 
-      <div className="mt-4 grid grid-cols-2 gap-4 lg:grid-cols-4">
+      <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {summary.map(([l, v]) => (
-          <div key={l} className="surface-card p-4">
-            <p className="text-xs text-muted-foreground">{l}</p>
-            <p className="mt-1 text-xl font-bold text-foreground">{v}</p>
-          </div>
+          <StatCard key={l} label={l} value={v} />
         ))}
-      </div>
-
-      <div className="surface-card mt-6 flex flex-wrap items-end gap-3 p-4">
-        <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border p-1">
-          {rangeOptions.map((r) => (
-            <button
-              key={r.key}
-              onClick={() => setRange(r.key)}
-              className={
-                range === r.key
-                  ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
-                  : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
-              }
-            >
-              {r.label}
-            </button>
-          ))}
-        </div>
-        {range === "custom" && (
-          <div className="flex flex-wrap items-end gap-3">
-            <div className="space-y-1">
-              <Label htmlFor="from" className="text-xs">
-                From
-              </Label>
-              <Input
-                id="from"
-                type="date"
-                value={from}
-                onChange={(e) => setFrom(e.target.value)}
-                className="w-40"
-              />
-            </div>
-            <div className="space-y-1">
-              <Label htmlFor="to" className="text-xs">
-                To
-              </Label>
-              <Input
-                id="to"
-                type="date"
-                value={to}
-                onChange={(e) => setTo(e.target.value)}
-                className="w-40"
-              />
-            </div>
-          </div>
-        )}
-        <p className="ml-auto text-xs text-muted-foreground">
-          {formatDate(bounds.start.toISOString())} → {formatDate(bounds.end.toISOString())} ·{" "}
-          {formatNumber(txns.length)} scans in range
-        </p>
       </div>
 
       <Panel
         title={`${categories.find((c) => c.key === category)!.label} report`}
         description="Tabular detail for the selected range"
-        className="mt-4"
+        className="mt-6"
+        actions={
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => handleExport("csv")}>
+              <Download className="size-4" /> Export CSV
+            </Button>
+            <Button size="sm" onClick={() => handleExport("excel")}>
+              <FileSpreadsheet className="size-4" /> Export Excel
+            </Button>
+          </div>
+        }
       >
-        <div className="overflow-x-auto">
+        <div className="mb-6 flex flex-wrap items-end gap-3 border-b border-border/40 pb-5">
+          <div className="flex flex-wrap items-center gap-1 rounded-lg border border-border bg-background p-1">
+            {rangeOptions.map((r) => (
+              <button
+                key={r.key}
+                onClick={() => setRange(r.key)}
+                className={
+                  range === r.key
+                    ? "rounded-md bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground shadow-sm"
+                    : "rounded-md px-3 py-1.5 text-xs font-medium text-muted-foreground hover:bg-muted"
+                }
+              >
+                {r.label}
+              </button>
+            ))}
+          </div>
+          {range === "custom" && (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="space-y-1">
+                <Label htmlFor="from" className="text-xs">
+                  From
+                </Label>
+                <Input
+                  id="from"
+                  type="date"
+                  value={from}
+                  onChange={(e) => setFrom(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="to" className="text-xs">
+                  To
+                </Label>
+                <Input
+                  id="to"
+                  type="date"
+                  value={to}
+                  onChange={(e) => setTo(e.target.value)}
+                  className="w-40"
+                />
+              </div>
+            </div>
+          )}
+          <p className="ml-auto text-xs text-muted-foreground">
+            {formatDate(bounds.start.toISOString())} → {formatDate(bounds.end.toISOString())} ·{" "}
+            {formatNumber(txns.length)} scans in range
+          </p>
+        </div>
+
+        <div className="mt-4">
           {category === "workers" && (
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="border-b border-border bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  {[
-                    "Worker",
-                    "Status",
-                    "Scans",
-                    "Transactions",
-                    "Discount processed",
-                    "Last activity",
-                  ].map((h) => (
-                    <th key={h} className="px-4 py-3 text-left font-semibold">
-                      {h}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {workers.map((w) => (
-                  <tr key={w.id} className="border-b border-border/70 last:border-0">
-                    <td className="px-4 py-3 font-medium">{w.name}</td>
-                    <td className="px-4 py-3">
-                      <StatusBadge status={w.status} />
-                    </td>
-                    <td className="px-4 py-3">{formatNumber(w.scans)}</td>
-                    <td className="px-4 py-3">{formatNumber(w.transactions)}</td>
-                    <td className="px-4 py-3 text-teal">{formatCurrency(w.discountProcessed)}</td>
-                    <td className="px-4 py-3 text-muted-foreground">
-                      {formatDate(w.lastActivity)}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable 
+              rows={workers} 
+              pageSize={10}
+              emptyMessage="No workers found."
+              columns={[
+                { key: "name", header: "Worker", sortValue: w => w.name, render: w => <span className="font-medium">{w.name}</span> },
+                { key: "status", header: "Status", sortValue: w => w.status, render: w => <StatusBadge status={w.status} /> },
+                { key: "scans", header: "Scans", sortValue: w => w.scans, render: w => formatNumber(w.scans) },
+                { key: "transactions", header: "Transactions", sortValue: w => w.transactions, render: w => formatNumber(w.transactions) },
+                { key: "discount", header: "Discount processed", sortValue: w => w.discountProcessed, render: w => <span className="font-medium text-teal">{formatCurrency(w.discountProcessed)}</span> },
+                { key: "lastActivity", header: "Last activity", sortValue: w => w.lastActivity, render: w => <span className="text-muted-foreground">{formatDate(w.lastActivity)}</span> },
+              ]} 
+            />
           )}
 
           {category === "groups" && (
-            <table className="w-full min-w-[720px] text-sm">
-              <thead className="border-b border-border bg-muted/50 text-xs uppercase text-muted-foreground">
-                <tr>
-                  {["Group", "Discount %", "Customers", "Transactions", "Discount generated"].map(
-                    (h) => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold">
-                        {h}
-                      </th>
-                    ),
-                  )}
-                </tr>
-              </thead>
-              <tbody>
-                {dist.map((g) => (
-                  <tr key={g.id} className="border-b border-border/70 last:border-0">
-                    <td className="px-4 py-3 font-medium">{g.name}</td>
-                    <td className="px-4 py-3">{g.discountPercent}%</td>
-                    <td className="px-4 py-3">{formatNumber(g.customers)}</td>
-                    <td className="px-4 py-3">{formatNumber(g.transactions)}</td>
-                    <td className="px-4 py-3 text-teal">{formatCurrency(g.discountGenerated)}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+            <DataTable 
+              rows={dist} 
+              pageSize={10}
+              emptyMessage="No groups found."
+              columns={[
+                { key: "name", header: "Group", sortValue: g => g.name, render: g => <span className="font-medium">{g.name}</span> },
+                { key: "discount", header: "Discount %", sortValue: g => g.discountPercent, render: g => `${g.discountPercent}%` },
+                { key: "customers", header: "Customers", sortValue: g => g.customers, render: g => formatNumber(g.customers) },
+                { key: "transactions", header: "Transactions", sortValue: g => g.transactions, render: g => formatNumber(g.transactions) },
+                { key: "discountGenerated", header: "Discount generated", sortValue: g => g.discountGenerated, render: g => <span className="font-medium text-teal">{formatCurrency(g.discountGenerated)}</span> },
+              ]}
+            />
           )}
 
           {category === "customers" && (
-            <div>
-              <table className="w-full min-w-[720px] text-sm">
-                <thead className="border-b border-border bg-muted/50 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    {[
-                      "Customer",
-                      "Registered",
-                      "Group",
-                      "Transactions",
-                      "Discount received",
-                      "Status",
-                    ].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left font-semibold">
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedRegs.map((c) => (
-                    <tr
-                      key={c.id}
-                      className="border-b border-border/70 last:border-0 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-medium text-foreground">{c.name}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {formatDate(c.registeredAt)}
-                      </td>
-                      <td className="px-4 py-3">{groups.find((g) => g.id === c.groupId)?.name}</td>
-                      <td className="px-4 py-3">{formatNumber(c.transactions)}</td>
-                      <td className="px-4 py-3 font-medium text-teal">
-                        {formatCurrency(c.discountReceived)}
-                      </td>
-                      <td className="px-4 py-3">
-                        <StatusBadge status={c.status} />
-                      </td>
-                    </tr>
-                  ))}
-                  {pagedRegs.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-4 py-12 text-center text-sm text-muted-foreground"
-                      >
-                        No registrations in this range.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              <TablePagination
-                currentPage={safeRegPage}
-                totalPages={totalRegPages}
-                pageSize={customersPageSize}
-                totalItems={regs.length}
-                currentCount={pagedRegs.length}
-                onPageChange={setCustomersPage}
-                onPageSizeChange={setCustomersPageSize}
-              />
-            </div>
+            <DataTable 
+              rows={regs} 
+              pageSize={10}
+              emptyMessage="No registrations in this range."
+              columns={[
+                { key: "name", header: "Customer", sortValue: c => c.name, render: c => <span className="font-medium">{c.name}</span> },
+                { key: "registered", header: "Registered", sortValue: c => c.registeredAt, render: c => <span className="text-muted-foreground">{formatDate(c.registeredAt)}</span> },
+                { key: "group", header: "Group", sortValue: c => groups.find((g) => g.id === c.groupId)?.name ?? "", render: c => groups.find((g) => g.id === c.groupId)?.name },
+                { key: "transactions", header: "Transactions", sortValue: c => c.transactions, render: c => formatNumber(c.transactions) },
+                { key: "discount", header: "Discount received", sortValue: c => c.discountReceived, render: c => <span className="font-medium text-teal">{formatCurrency(c.discountReceived)}</span> },
+                { key: "status", header: "Status", sortValue: c => c.status, render: c => <StatusBadge status={c.status} /> },
+              ]}
+            />
           )}
 
           {(category === "transactions" || category === "discount") && (
-            <div>
-              <table className="w-full min-w-[820px] text-sm">
-                <thead className="border-b border-border bg-muted/50 text-xs uppercase text-muted-foreground">
-                  <tr>
-                    {["Txn", "Date", "Customer", "Worker", "Fuel", "Amount", "Discount"].map(
-                      (h) => (
-                        <th key={h} className="px-4 py-3 text-left font-semibold">
-                          {h}
-                        </th>
-                      ),
-                    )}
-                  </tr>
-                </thead>
-                <tbody>
-                  {pagedTxns.map((t) => (
-                    <tr
-                      key={t.id}
-                      className="border-b border-border/70 last:border-0 hover:bg-muted/30 transition-colors"
-                    >
-                      <td className="px-4 py-3 font-mono text-xs text-muted-foreground">{t.id}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {formatDateTime(t.createdAt)}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-foreground">{t.customerName}</td>
-                      <td className="px-4 py-3 text-foreground">{t.workerName}</td>
-                      <td className="px-4 py-3 text-muted-foreground">
-                        {t.fuel} · {t.litres} L
-                      </td>
-                      <td className="px-4 py-3 font-medium text-foreground">
-                        {formatCurrency(t.amount)}
-                      </td>
-                      <td className="px-4 py-3 font-medium text-teal">
-                        −{formatCurrency(t.discountAmount)} ({t.discountPercent}%)
-                      </td>
-                    </tr>
-                  ))}
-                  {pagedTxns.length === 0 && (
-                    <tr>
-                      <td
-                        colSpan={7}
-                        className="px-4 py-12 text-center text-sm text-muted-foreground"
-                      >
-                        No transactions in this range.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-
-              <TablePagination
-                currentPage={safeTxnPage}
-                totalPages={totalTxnPages}
-                pageSize={transactionsPageSize}
-                totalItems={txns.length}
-                currentCount={pagedTxns.length}
-                onPageChange={setTransactionsPage}
-                onPageSizeChange={setTransactionsPageSize}
-              />
-            </div>
+            <DataTable 
+              rows={txns} 
+              pageSize={10}
+              emptyMessage="No transactions in this range."
+              columns={[
+                { key: "id", header: "Txn", sortValue: t => t.id, render: t => <span className="font-mono text-xs text-muted-foreground">{t.id}</span> },
+                { key: "date", header: "Date", sortValue: t => t.createdAt, render: t => <span className="text-muted-foreground">{formatDateTime(t.createdAt)}</span> },
+                { key: "customer", header: "Customer", sortValue: t => t.customerName, render: t => <span className="font-medium">{t.customerName}</span> },
+                { key: "worker", header: "Worker", sortValue: t => t.workerName, render: t => t.workerName },
+                { key: "fuel", header: "Fuel", sortValue: t => t.litres, render: t => <span className="text-muted-foreground">{t.fuel} • {t.litres} L</span> },
+                { key: "amount", header: "Amount", sortValue: t => t.amount, render: t => <span className="font-medium">{formatCurrency(t.amount)}</span> },
+                { key: "discount", header: "Discount", sortValue: t => t.discountAmount, render: t => <span className="font-medium text-teal">-{formatCurrency(t.discountAmount)} ({t.discountPercent}%)</span> },
+              ]}
+            />
           )}
         </div>
       </Panel>

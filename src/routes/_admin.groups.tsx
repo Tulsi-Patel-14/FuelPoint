@@ -89,7 +89,7 @@ function GroupsPage() {
   return (
     <>
       <PageHeader
-        title="Groups & Discounts"
+        title="Groups"
         subtitle="Define discount groups and control the percentage applied at scan time."
         actions={
           <Button onClick={() => setEditing({ ...blank })}>
@@ -120,52 +120,13 @@ function GroupsPage() {
         />
       </div>
 
-      {/* Group Analytics Section */}
-      <div className="mt-8">
-        <div className="mb-4">
-          <h2 className="text-lg font-semibold tracking-tight text-foreground">Group analytics</h2>
-          <p className="text-xs text-muted-foreground">
-            Customer distribution and discount generation across groups
-          </p>
-        </div>
-
-        <div className="grid gap-6 lg:grid-cols-2">
-          <Panel
-            title="Customer distribution"
-            description="Share of registered customers across groups"
-          >
-            <DonutChart
-              data={stats
-                .filter((g) => g.customers > 0)
-                .map((g) => ({ name: g.name, value: g.customers }))}
-              height={320}
-            />
-          </Panel>
-          <Panel title="Discount contribution" description="Total discount generated per group">
-            <HorizontalBarChart
-              data={stats
-                .slice()
-                .sort((a, b) => b.discountGenerated - a.discountGenerated)
-                .map((g) => ({ name: g.name, discount: g.discountGenerated }))}
-              dataKey="discount"
-              height={320}
-              color="var(--teal)"
-              valueFormatter={formatCurrency}
-              yAxisWidth={110}
-              showLabels
-            />
-          </Panel>
-        </div>
-      </div>
-
-      {/* Full-width Group Management */}
-      <div className="mt-8 space-y-4">
+      <div className="mt-8 grid gap-4 lg:grid-cols-2">
         {stats.map((g) => {
           const group = groups.find((x) => x.id === g.id)!;
           return (
             <div
               key={g.id}
-              className="surface-card p-5 transition-all duration-200 hover:shadow-elevated"
+              className="surface-card flex flex-col justify-between p-5 transition-all duration-200 hover:shadow-elevated"
             >
               <div className="flex flex-wrap items-start justify-between gap-4">
                 <div className="min-w-0 flex-1">
@@ -195,6 +156,7 @@ function GroupsPage() {
                     variant="outline"
                     size="icon"
                     aria-label="Edit group"
+                    title="Edit group"
                     onClick={() =>
                       setEditing({
                         id: group.id,
@@ -213,6 +175,7 @@ function GroupsPage() {
                         variant="outline"
                         size="icon"
                         aria-label="Toggle active"
+                        title={group.active ? "Deactivate group" : "Activate group"}
                         onClick={() => toggleGroupActive(group.id)}
                       >
                         <Power className="size-4" />
@@ -221,6 +184,7 @@ function GroupsPage() {
                         variant="outline"
                         size="icon"
                         aria-label="Delete group"
+                        title="Delete group"
                         className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                         onClick={() => {
                           deleteGroup(group.id);

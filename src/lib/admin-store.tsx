@@ -29,9 +29,9 @@ interface AdminState {
   toggleGroupActive: (groupId: string) => void;
   markRead: (id: string) => void;
   markAllRead: () => void;
-  updateCustomer: (customer: Customer) => void;
+  saveCustomer: (customer: Customer) => void;
   deleteCustomer: (customerId: string) => void;
-  updateWorker: (worker: Worker) => void;
+  saveWorker: (worker: Worker) => void;
   deleteWorker: (workerId: string) => void;
 }
 
@@ -116,16 +116,24 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, active: !g.active } : g)));
   }, []);
 
-  const updateCustomer = useCallback((customer: Customer) => {
-    setCustomers((prev) => prev.map((c) => (c.id === customer.id ? customer : c)));
+  const saveCustomer = useCallback((customer: Customer) => {
+    setCustomers((prev) => {
+      const exists = prev.some((c) => c.id === customer.id);
+      if (exists) return prev.map((c) => (c.id === customer.id ? customer : c));
+      return [...prev, customer];
+    });
   }, []);
 
   const deleteCustomer = useCallback((customerId: string) => {
     setCustomers((prev) => prev.filter((c) => c.id !== customerId));
   }, []);
 
-  const updateWorker = useCallback((worker: Worker) => {
-    setWorkers((prev) => prev.map((w) => (w.id === worker.id ? worker : w)));
+  const saveWorker = useCallback((worker: Worker) => {
+    setWorkers((prev) => {
+      const exists = prev.some((w) => w.id === worker.id);
+      if (exists) return prev.map((w) => (w.id === worker.id ? worker : w));
+      return [...prev, worker];
+    });
   }, []);
 
   const deleteWorker = useCallback((workerId: string) => {
@@ -152,9 +160,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     markRead: (id) =>
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n))),
     markAllRead: () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))),
-    updateCustomer,
+    saveCustomer,
     deleteCustomer,
-    updateWorker,
+    saveWorker,
     deleteWorker,
   };
 

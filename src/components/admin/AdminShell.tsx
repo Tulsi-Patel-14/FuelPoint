@@ -4,11 +4,15 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  ChevronsLeft,
+  ChevronsRight,
   Fuel,
   LayoutDashboard,
   LogOut,
   Menu,
   Search,
+  Sun,
+  Moon,
   Tags,
   UserCircle,
   UserPlus,
@@ -35,7 +39,7 @@ const nav = [
   { to: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { to: "/workers", label: "Workers", icon: Wrench },
   { to: "/customers", label: "Customers", icon: Users },
-  { to: "/groups", label: "Groups & Discounts", icon: Tags },
+  { to: "/groups", label: "Groups", icon: Tags },
   { to: "/reports", label: "Reports", icon: FileBarChart },
 ] as const;
 
@@ -56,6 +60,34 @@ export function AdminShell({ children }: { children: ReactNode }) {
     }
     return false;
   });
+  
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window !== "undefined") {
+      const stored = localStorage.getItem("fuelpoint-theme");
+      if (stored) {
+        const dark = stored === "dark";
+        if (dark) document.documentElement.classList.add("dark");
+        else document.documentElement.classList.remove("dark");
+        return dark;
+      }
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      if (prefersDark) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+      return prefersDark;
+    }
+    return false;
+  });
+
+  const toggleTheme = () => {
+    setIsDark((prev) => {
+      const next = !prev;
+      localStorage.setItem("fuelpoint-theme", next ? "dark" : "light");
+      if (next) document.documentElement.classList.add("dark");
+      else document.documentElement.classList.remove("dark");
+      return next;
+    });
+  };
+
   const [searchQuery, setSearchQuery] = useState("");
   const [notifOpen, setNotifOpen] = useState(false);
 
@@ -90,33 +122,27 @@ export function AdminShell({ children }: { children: ReactNode }) {
       {/* Sidebar */}
       <aside
         className={cn(
-          "gradient-navy fixed inset-y-0 left-0 z-50 flex flex-col text-sidebar-foreground transition-all duration-300 lg:translate-x-0",
+          "bg-sidebar border-r border-sidebar-border fixed inset-y-0 left-0 z-50 flex flex-col text-sidebar-foreground transition-all duration-300 lg:translate-x-0",
           isCollapsed ? "w-20" : "w-72",
           open ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className={cn("flex items-center relative py-6", isCollapsed ? "justify-center px-0" : "gap-3 px-6")}>
-          <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-primary/15 text-primary-foreground ring-1 ring-white/15">
-            <Fuel className="size-5" />
-          </span>
-          {!isCollapsed && (
-            <div className="leading-tight overflow-hidden">
-              <p className="text-sm font-semibold text-white truncate">FuelPoint</p>
-              <p className="text-xs text-sidebar-foreground/70 truncate">Admin Console</p>
-            </div>
-          )}
-          
-          <button
-            className="hidden lg:flex absolute -right-3 top-8 size-6 items-center justify-center rounded-full bg-background border border-border text-foreground hover:bg-muted shadow-sm z-50"
-            onClick={toggleCollapse}
-            aria-label="Toggle sidebar"
-          >
-            {isCollapsed ? <ChevronRight className="size-3.5" /> : <ChevronLeft className="size-3.5" />}
-          </button>
+        <div className={cn("flex items-center justify-between py-6", isCollapsed ? "flex-col gap-4 px-0" : "px-6")}>
+          <div className={cn("flex items-center gap-3", isCollapsed && "justify-center")}>
+            <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-sidebar-primary/15 text-sidebar-primary ring-1 ring-white/15">
+              <Fuel className="size-5" />
+            </span>
+            {!isCollapsed && (
+              <div className="leading-tight overflow-hidden">
+                <p className="text-sm font-semibold text-white truncate">FuelPoint</p>
+                <p className="text-xs text-muted-foreground truncate">Admin Console</p>
+              </div>
+            )}
+          </div>
 
           {!isCollapsed && (
             <button
-              className="ml-auto rounded-md p-1 text-sidebar-foreground/70 hover:bg-white/10 lg:hidden shrink-0"
+              className="ml-auto rounded-md p-1 text-muted-foreground hover:bg-muted lg:hidden shrink-0"
               onClick={() => setOpen(false)}
               aria-label="Close navigation"
             >
@@ -132,7 +158,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
               to={to}
               onClick={() => setOpen(false)}
               className={cn(
-                "group relative flex items-center rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-white/8 hover:text-white data-[status=active]:bg-sidebar-primary data-[status=active]:text-sidebar-primary-foreground",
+                "group relative flex items-center rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[status=active]:bg-sidebar-primary data-[status=active]:text-sidebar-primary-foreground",
                 isCollapsed ? "justify-center px-0" : "gap-3 px-3"
               )}
               title={isCollapsed ? label : undefined}
@@ -152,14 +178,19 @@ export function AdminShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        {!isCollapsed && (
-          <div className="m-3 rounded-xl bg-white/6 p-4 ring-1 ring-white/10">
-            <p className="text-xs font-semibold text-white">Discount engine</p>
-            <p className="mt-1 text-xs text-sidebar-foreground/70">
-              Group-based discounts are applied automatically at scan time.
-            </p>
-          </div>
-        )}
+        <div className="mt-auto p-3">
+          <button
+            onClick={handleLogout}
+            className={cn(
+              "group relative flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-destructive/15 hover:text-destructive outline-none cursor-pointer",
+              isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+            )}
+            title={isCollapsed ? "Logout" : undefined}
+          >
+            <LogOut className="size-[18px] shrink-0" />
+            {!isCollapsed && <span className="truncate">Logout</span>}
+          </button>
+        </div>
       </aside>
 
       {open && (
@@ -172,26 +203,30 @@ export function AdminShell({ children }: { children: ReactNode }) {
 
       {/* Main */}
       <div className={cn("transition-all duration-300", isCollapsed ? "lg:pl-20" : "lg:pl-72")}>
-        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/90 px-4 backdrop-blur sm:px-6">
+        <header className="sticky top-0 z-30 flex h-16 items-center gap-3 border-b border-border bg-card/90 backdrop-blur px-4 sm:px-6 text-foreground">
           <button
             className="rounded-md p-2 text-muted-foreground hover:bg-muted lg:hidden"
             onClick={() => setOpen(true)}
             aria-label="Open navigation"
+            title="Open navigation"
           >
             <Menu className="size-5" />
           </button>
-          <div>
-            <h2 className="text-sm font-semibold text-foreground sm:text-base">{currentTitle}</h2>
-            <p className="hidden text-xs text-muted-foreground sm:block">
-              Petrol pump customer &amp; discount management
-            </p>
-          </div>
+          
+          <button
+            className="hidden lg:flex rounded-md p-2 text-muted-foreground hover:bg-muted outline-none shrink-0"
+            onClick={toggleCollapse}
+            aria-label="Toggle sidebar"
+            title="Toggle sidebar"
+          >
+            {isCollapsed ? <ChevronsRight className="size-5" /> : <ChevronsLeft className="size-5" />}
+          </button>
 
-          <div className="ml-auto hidden items-center gap-2 rounded-lg border border-border bg-background px-3 py-2 md:flex md:w-72">
+          <div className="hidden items-center gap-2 rounded-lg border border-border bg-muted px-3 py-2 md:flex md:w-72">
             <Search className="size-4 text-muted-foreground" />
             <input
               placeholder="Search customers, workers…"
-              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
+              className="w-full bg-transparent text-sm text-foreground outline-none placeholder:text-muted-foreground"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               onKeyDown={(e) => {
@@ -205,11 +240,21 @@ export function AdminShell({ children }: { children: ReactNode }) {
             />
           </div>
 
+          <button
+            onClick={toggleTheme}
+            className="ml-auto rounded-lg p-2 text-muted-foreground hover:bg-muted outline-none cursor-pointer"
+            aria-label="Toggle theme"
+            title="Toggle theme"
+          >
+            {isDark ? <Sun className="size-5" /> : <Moon className="size-5" />}
+          </button>
+
           <Popover open={notifOpen} onOpenChange={setNotifOpen}>
             <PopoverTrigger asChild>
               <button
-                className="relative ml-auto rounded-lg p-2 text-muted-foreground hover:bg-muted md:ml-0 outline-none"
+                className="relative rounded-lg p-2 text-muted-foreground hover:bg-muted outline-none cursor-pointer"
                 aria-label="Notifications"
+                title="Notifications"
               >
                 <Bell className="size-5" />
                 {unreadCount > 0 && (
@@ -261,7 +306,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                               e.stopPropagation();
                               markRead(n.id);
                             }}
-                            className="text-[10px] font-medium text-primary hover:underline"
+                            className="text-[10px] font-medium text-primary hover:underline cursor-pointer"
                           >
                             Mark read
                           </button>
@@ -273,7 +318,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                               e.stopPropagation();
                               setNotifOpen(false);
                             }}
-                            className="text-[10px] font-medium text-muted-foreground hover:text-foreground hover:underline"
+                            className="text-[10px] font-medium text-muted-foreground hover:text-foreground hover:underline cursor-pointer"
                           >
                             Open
                           </Link>
@@ -292,7 +337,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
                 <Link
                   to="/notifications"
                   onClick={() => setNotifOpen(false)}
-                  className="block w-full rounded-md py-2 text-center text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  className="block w-full rounded-md py-2 text-center text-xs font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
                 >
                   View all notifications
                 </Link>
@@ -301,7 +346,10 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </Popover>
 
           <DropdownMenu>
-            <DropdownMenuTrigger className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left hover:bg-muted">
+            <DropdownMenuTrigger 
+              className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left hover:bg-muted cursor-pointer outline-none"
+              title="My Profile"
+            >
               <span className="gradient-brand flex size-8 items-center justify-center rounded-full text-xs font-semibold text-primary-foreground">
                 {profile.initials}
               </span>
@@ -321,11 +369,6 @@ export function AdminShell({ children }: { children: ReactNode }) {
                   <UserCircle className="size-4" /> My profile
                 </Link>
               </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link to="/reports" className="flex items-center gap-2 cursor-pointer">
-                  <FileBarChart className="size-4" /> Reports
-                </Link>
-              </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={handleLogout} className="text-destructive cursor-pointer">
                 <LogOut className="size-4" /> Log out
@@ -334,7 +377,7 @@ export function AdminShell({ children }: { children: ReactNode }) {
           </DropdownMenu>
         </header>
 
-        <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
+        <main className="mx-auto w-full max-w-[1500px] px-4 py-6 sm:px-6 lg:px-8 ">
           {children}
         </main>
       </div>

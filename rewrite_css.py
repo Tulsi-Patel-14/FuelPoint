@@ -1,4 +1,14 @@
-@import "tailwindcss" source(none);
+import re
+
+with open(r'd:\FuelStationAdmin\src\styles.css', 'r', encoding='utf-8') as f:
+    css = f.read()
+
+# Replace --font-sans and --font-display
+css = re.sub(r'--font-sans: "[^"]+".*?;', '--font-sans: "Lato", ui-sans-serif, system-ui, sans-serif;', css)
+css = re.sub(r'--font-display: "[^"]+".*?;', '--font-display: "Lato", ui-sans-serif, system-ui, sans-serif;', css)
+
+# We will just write a new CSS file entirely since we are fundamentally changing the theme colors.
+new_css = """@import "tailwindcss" source(none);
 @source "../src";
 @import "tw-animate-css";
 
@@ -60,85 +70,76 @@
 
 :root {
   --radius: 8px;
-  --background: #F7F9FC;
-  --foreground: #0B2A3F;
+  --background: #FFFFFF;
+  --foreground: #6D6E71;
   --card: #FFFFFF;
-  --card-foreground: #0B2A3F;
+  --card-foreground: #6D6E71;
   --popover: #FFFFFF;
-  --popover-foreground: #0B2A3F;
-  --primary: #0B4C8C;
-  --primary-foreground: #FFFFFF;
-  --secondary: #EEF3F8;
-  --secondary-foreground: #0B2A3F;
-  --muted: #EEF3F8;
-  --muted-foreground: #5C6B7A;
-  --accent: #EEF3F8;
-  --accent-foreground: #0B2A3F;
-  --destructive: #DC3E3E;
+  --popover-foreground: #6D6E71;
+  --primary: #14C7A3;
+  --primary-foreground: #6D6E71;
+  --secondary: #F5F7FA;
+  --secondary-foreground: #6D6E71;
+  --muted: #F5F7FA;
+  --muted-foreground: #6D6E71;
+  --accent: #F5F7FA;
+  --accent-foreground: #6D6E71;
+  --destructive: oklch(0.634 0.082 76.0);
   --destructive-foreground: #FFFFFF;
-  --success: #1FA971;
+  --success: #14C7A3;
   --success-foreground: #FFFFFF;
-  --warning: #F5A623;
-  --warning-foreground: #0B2A3F;
-  --navy: #062A4D;
+  --warning: oklch(0.748 0.127 103.7);
+  --warning-foreground: #6D6E71;
+  --navy: #0B1F2A;
   --navy-foreground: #FFFFFF;
-  --teal: #F26B21;
-  --teal-foreground: #FFFFFF;
-  --border: #E2E8F0;
+  --teal: #14C7A3;
+  --teal-foreground: #6D6E71;
+  --border: #E5E7EB;
   --input: #FFFFFF;
-  --ring: #0B4C8C;
-  --chart-1: #0B4C8C;
-  --chart-2: #249ADF;
-  --chart-3: #F26B21;
-  --chart-4: #5C6B7A;
-  --chart-5: #1FA971;
-  --chart-6: #F5A623;
-  --sidebar: #062A4D;
-  --sidebar-foreground: #FFFFFF;
-  --sidebar-primary: #249ADF;
-  --sidebar-primary-foreground: #FFFFFF;
-  --sidebar-accent: #0B4C8C;
-  --sidebar-accent-foreground: #FFFFFF;
-  --sidebar-border: #0B4C8C;
-  --sidebar-ring: #249ADF;
+  --ring: #14C7A3;
+  --chart-1: #14C7A3;
+  --chart-2: #1F8FB8;
+  --chart-3: #6D6E71;
+  --chart-4: #0B1F2A;
+  --chart-5: #CCCCCC;
+  --sidebar: #FFFFFF;
+  --sidebar-foreground: #6D6E71;
+  --sidebar-primary: #14C7A3;
+  --sidebar-primary-foreground: #6D6E71;
+  --sidebar-accent: #F5F7FA;
+  --sidebar-accent-foreground: #14C7A3;
+  --sidebar-border: #E5E7EB;
+  --sidebar-ring: #14C7A3;
 }
 
 .dark {
-  --background: #081C30;
-  --foreground: #E7EEF5;
-  --card: #0D2A45;
-  --card-foreground: #E7EEF5;
-  --popover: #0D2A45;
-  --popover-foreground: #E7EEF5;
-  --primary: #249ADF;
-  --primary-foreground: #062A4D;
-  --secondary: #14324F;
-  --secondary-foreground: #E7EEF5;
-  --muted: #14324F;
-  --muted-foreground: #9FB3C4;
-  --accent: #14324F;
-  --accent-foreground: #E7EEF5;
-  --destructive: #F16565;
+  --background: #0B1F2A;
+  --foreground: #F5F7FA;
+  --card: #0B1F2A;
+  --card-foreground: #F5F7FA;
+  --popover: #0B1F2A;
+  --popover-foreground: #F5F7FA;
+  --primary: #14C7A3;
+  --primary-foreground: #0B1F2A;
+  --secondary: #1F8FB8;
+  --secondary-foreground: #F5F7FA;
+  --muted: #6D6E71;
+  --muted-foreground: #CCCCCC;
+  --accent: #1F8FB8;
+  --accent-foreground: #FFFFFF;
+  --destructive: oklch(0.634 0.082 76.0);
   --destructive-foreground: #FFFFFF;
-  --border: #1D3E5C;
-  --input: #0D2A45;
-  --ring: #249ADF;
-  --teal: #FF8A3D;
-  --teal-foreground: #062A4D;
-  --sidebar: #051625;
-  --sidebar-foreground: #E7EEF5;
-  --sidebar-primary: #249ADF;
-  --sidebar-primary-foreground: #062A4D;
-  --sidebar-accent: #0D2A45;
-  --sidebar-accent-foreground: #E7EEF5;
-  --sidebar-border: #1D3E5C;
-  --sidebar-ring: #249ADF;
-  --chart-1: #249ADF;
-  --chart-2: #5AB6E8;
-  --chart-3: #FF8A3D;
-  --chart-4: #9FB3C4;
-  --chart-5: #35C88A;
-  --chart-6: #FBBF66;
+  --border: #6D6E71;
+  --input: #0B1F2A;
+  --ring: #14C7A3;
+  --sidebar: #0B1F2A;
+  --sidebar-foreground: #F5F7FA;
+  --sidebar-primary: #14C7A3;
+  --sidebar-primary-foreground: #0B1F2A;
+  --sidebar-accent: #1F8FB8;
+  --sidebar-accent-foreground: #FFFFFF;
+  --sidebar-border: #6D6E71;
+  --sidebar-ring: #14C7A3;
 }
 
 @layer base {
@@ -171,9 +172,9 @@
 @utility gradient-navy {
   background-image: linear-gradient(
     145deg,
-    #062A4D 0%,
-    #0B4C8C 55%,
-    #145A9E 100%
+    var(--color-navy) 0%,
+    oklch(0.28 0.04 276.8) 55%,
+    oklch(0.33 0.05 276.8) 100%
   );
 }
 
@@ -201,3 +202,9 @@
     border-radius: 10px;
   }
 }
+"""
+
+with open(r'd:\FuelStationAdmin\src\styles.css', 'w', encoding='utf-8') as f:
+    f.write(new_css)
+
+print("styles.css updated")

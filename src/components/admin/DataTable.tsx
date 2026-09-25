@@ -16,6 +16,7 @@ export function TablePagination({
   currentPage,
   totalPages,
   pageSize,
+  pageSizeOptions = [10, 25, 50, 100],
   totalItems,
   currentCount,
   onPageChange,
@@ -25,6 +26,7 @@ export function TablePagination({
   currentPage: number;
   totalPages: number;
   pageSize: number;
+  pageSizeOptions?: number[];
   totalItems: number;
   currentCount: number;
   onPageChange: (page: number) => void;
@@ -57,7 +59,7 @@ export function TablePagination({
                 <SelectValue placeholder={pageSize} />
               </SelectTrigger>
               <SelectContent>
-                {[10, 25, 50, 100].map((size) => (
+                {pageSizeOptions.map((size) => (
                   <SelectItem key={size} value={size.toString()} className="text-xs cursor-pointer">
                     {size}
                   </SelectItem>
@@ -111,7 +113,7 @@ export function TablePagination({
 export function DataTable<T extends { id: string }>({
   rows,
   columns,
-  pageSize = 8,
+  pageSize = 10,
   emptyMessage = "No records match the current filters.",
   onRowClick,
 }: {
@@ -169,7 +171,7 @@ export function DataTable<T extends { id: string }>({
                     <button
                       onClick={() => toggleSort(col.key)}
                       className={cn(
-                        "inline-flex items-center gap-1 transition-colors hover:text-foreground",
+                        "inline-flex items-center gap-1 cursor-pointer transition-colors hover:text-foreground",
                         sort?.key === col.key && "text-primary",
                       )}
                     >
@@ -225,6 +227,7 @@ export function DataTable<T extends { id: string }>({
         currentPage={safePage}
         totalPages={totalPages}
         pageSize={actualPageSize}
+        pageSizeOptions={Array.from(new Set([pageSize, 10, 25, 50, 100])).sort((a, b) => a - b)}
         totalItems={sorted.length}
         currentCount={slice.length}
         onPageChange={setPage}
