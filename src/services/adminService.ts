@@ -1,12 +1,3 @@
-import {
-  TODAY,
-  adminProfile,
-  customers as mockCustomers,
-  groups as mockGroups,
-  notifications as mockNotifications,
-  transactions as mockTransactions,
-  workers as mockWorkers,
-} from "./mockData";
 import type {
   Customer,
   Group,
@@ -15,22 +6,40 @@ import type {
   Transaction,
   Worker,
 } from "./types";
+import { DEFAULT_GROUP_ID } from "./types";
 
-/**
- * Single access layer for admin data. Swap the bodies of these functions for
- * real HTTP calls (fetch/axios) later — the UI only talks to this module.
- */
-export const adminService = {
-  getGroups: (): Group[] => mockGroups,
-  getCustomers: (): Customer[] => mockCustomers,
-  getWorkers: (): Worker[] => mockWorkers,
-  getTransactions: (): Transaction[] => mockTransactions,
-  getNotifications: (): Notification[] => mockNotifications,
-  getProfile: () => adminProfile,
-  getToday: () => TODAY,
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1/admin';
+let token = localStorage.getItem('adminToken') || '';
+
+export const setToken = (newToken: string) => {
+  token = newToken;
+  localStorage.setItem('adminToken', token);
 };
 
-import { DEFAULT_GROUP_ID } from "./types";
+const fetchApi = async (endpoint: string) => {
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    headers: {
+      'Authorization': `Bearer ${token}`
+    }
+  });
+  if (!response.ok) throw new Error(`API Error: ${response.status}`);
+  const json = await response.json();
+  return json.data;
+};
+
+export const adminService = {
+  getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
+  getCustomers: async (): Promise<Customer[]> => fetchApi('/customers'),
+  getWorkers: async (): Promise<Worker[]> => fetchApi('/workers'),
+  getTransactions: async (): Promise<Transaction[]> => {
+    const res = await fetchApi('/transactions');
+    return res.data || res; // handle pagination structure if applicable
+  },
+  getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
+  getProfile: async () => fetchApi('/profile'),
+  getToday: () => new Date(),
+};
+
 export { DEFAULT_GROUP_ID };
 
 /* ---------- formatting helpers ---------- */
@@ -59,6 +68,7 @@ export const formatDateTime = (value: string | null) =>
       })
     : "—";
 
+const TODAY = new Date();
 export const relativeDays = (value: string | null) => {
   if (!value) return "Never";
   const diff = Math.floor((TODAY.getTime() - new Date(value).getTime()) / 86400000);
@@ -97,8 +107,8 @@ export function buildOverview(
   transactions: Transaction[],
 ): Overview {
   const tk = todayKey();
-  const totalDiscount = transactions.reduce((s, t) => s + t.discountAmount, 0);
-  const totalRevenue = transactions.reduce((s, t) => s + t.amount, 0);
+  const totalDiscount = transactions.reduce((s, t) => s + (t.discountAmount || 0), 0);
+  const totalRevenue = transactions.reduce((s, t) => s + (t.amount || 0), 0);
   return {
     totalCustomers: customers.length,
     totalWorkers: workers.length,
@@ -110,7 +120,7 @@ export function buildOverview(
     todayTransactions: transactions.filter((t) => dayKey(t.createdAt) === tk).length,
     todayDiscount: transactions
       .filter((t) => dayKey(t.createdAt) === tk)
-      .reduce((s, t) => s + t.discountAmount, 0),
+      .reduce((s, t) => s + (t.discountAmount || 0), 0),
     newRegistrations7d: customers.filter(
       (c) => TODAY.getTime() - new Date(c.registeredAt).getTime() <= 7 * 86400000,
     ).length,
@@ -143,8 +153,8 @@ export function buildSeries(
     const b = buckets.get(dayKey(t.createdAt));
     if (!b) return;
     b.transactions += 1;
-    b.discount += t.discountAmount;
-    b.revenue += t.amount;
+    b.discount += (t.discountAmount || 0);
+    b.revenue += (t.amount || 0);
   });
   customers.forEach((c) => {
     const b = buckets.get(dayKey(c.registeredAt));
@@ -162,14 +172,14 @@ export function groupDistribution(customers: Customer[], groups: Group[], transa
     customers: customers.filter((c) => c.groupId === g.id).length,
     discountGenerated: transactions
       .filter((t) => t.groupId === g.id)
-      .reduce((s, t) => s + t.discountAmount, 0),
+      .reduce((s, t) => s + (t.discountAmount || 0), 0),
     transactions: transactions.filter((t) => t.groupId === g.id).length,
   }));
 }
 
 export function workerActivity(workers: Worker[]) {
   return [...workers]
-    .sort((a, b) => b.scans - a.scans)
+    .sort((a, b) => (b.scans || 0) - (a.scans || 0))
     .map((w) => ({ name: w.name.split(" ")[0], scans: w.scans, transactions: w.transactions }));
 }
 
@@ -196,8 +206,6 @@ export function inRange(value: string, bounds: { start: Date; end: Date }) {
   const t = new Date(value).getTime();
   return t >= bounds.start.getTime() && t <= bounds.end.getTime();
 }
-
-/* ---------- CSV export (client-side) ---------- */
 
 export function exportCsv(filename: string, rows: Record<string, string | number>[]) {
   if (!rows.length) return;

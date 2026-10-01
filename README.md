@@ -1,4 +1,4 @@
-# PumpMaster Pro
+# FuelStation
 
 Build a premium Admin Dashboard web app for a petrol-pump/customer-discount management system.
 
