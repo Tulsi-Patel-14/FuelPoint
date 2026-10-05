@@ -69,14 +69,37 @@ function WorkersPage() {
   
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
   const [isSaving, setIsSaving] = useState(false);
   const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  const augmentedWorkers = useMemo(() => {
+    return workers.map((w) => {
+      const wTxns = transactions.filter(t => t.workerId === w.id);
+      const discount = wTxns.reduce((sum, t) => sum + (t.discountAmount || 0), 0);
+      const customers = new Set(wTxns.map(t => t.customerId)).size;
+      
+      let lastAct = w.lastActivity;
+      if (wTxns.length > 0) {
+        const sorted = [...wTxns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        lastAct = sorted[0].createdAt;
+      }
+
+      return {
+        ...w,
+        transactions: wTxns.length,
+        discountProcessed: discount,
+        customersScanned: customers,
+        lastActivity: lastAct
+      };
+    });
+  }, [workers, transactions]);
+
   const filtered = useMemo(
     () =>
-      workers.filter(
-        (w) =>
+      augmentedWorkers.filter((w) =>
           (status === "all" || w.status === status) &&
           (shift === "all" || w.shift === shift) &&
           (w.name.toLowerCase().includes(query.toLowerCase()) ||
@@ -88,14 +111,12 @@ function WorkersPage() {
 
   const totals = useMemo(
     () => ({
-      scans: workers.reduce((s, w) => s + w.scans, 0),
-      discount: workers.reduce((s, w) => s + w.discountProcessed, 0),
-      active: workers.filter((w) => w.status === "active").length,
+      scans: augmentedWorkers.reduce((s, w) => s + w.scans, 0),
+      discount: augmentedWorkers.reduce((s, w) => s + w.discountProcessed, 0),
+      active: augmentedWorkers.filter((w) => w.status === "active").length,
     }),
     [workers],
   );
-
-
 
   const columns: Column<Worker>[] = [
     {
@@ -110,12 +131,7 @@ function WorkersPage() {
               .map((n) => n[0])
               .join("")}
           </span>
-          <div>
-            <p className="font-medium text-foreground">{w.name}</p>
-            <p className="text-xs text-muted-foreground">
-              {w.id} · {w.shift} shift
-            </p>
-          </div>
+          <p className="font-medium text-foreground">{w.name}</p>
         </div>
       ),
     },
@@ -124,6 +140,12 @@ function WorkersPage() {
       header: "Status",
       sortValue: (w) => w.status,
       render: (w) => <StatusBadge status={w.status} />,
+    },
+    {
+      key: "shift",
+      header: "Shift",
+      sortValue: (w) => w.shift,
+      render: (w) => <span className="text-sm">{w.shift}</span>,
     },
     {
       key: "scans",
@@ -166,7 +188,7 @@ function WorkersPage() {
     },
     {
       key: "actions",
-      header: "",
+      header: "Actions",
       align: "right",
       render: (w) => (
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -174,7 +196,11 @@ function WorkersPage() {
             variant="ghost"
             size="icon"
             className="size-8"
-            onClick={() => setEditingWorker(w)}
+            onClick={() => {
+              setErrors({});
+              setConfirmPassword("");
+              setEditingWorker({ ...w, password: "" });
+            }}
           >
             <Pencil className="size-4" />
           </Button>
@@ -195,6 +221,45 @@ function WorkersPage() {
     ? transactions.filter((t) => t.workerId === selected.id).slice(0, 8)
     : [];
 
+  const validateForm = () => {
+    if (!editingWorker) return false;
+    const newErrors: Record<string, string> = {};
+    
+    if (!editingWorker.name.trim()) newErrors.name = "Full name is required.";
+    
+    if (!editingWorker.phone) {
+      newErrors.phone = "Phone number is required.";
+    } else if (editingWorker.phone.length !== 10) {
+      newErrors.phone = "Phone number must be exactly 10 digits.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!editingWorker.email.trim()) {
+      newErrors.email = "Email is required.";
+    } else if (!emailRegex.test(editingWorker.email.trim())) {
+      newErrors.email = "Enter a valid email address.";
+    }
+
+    if (!editingWorker.id) {
+      if (!editingWorker.password) {
+        newErrors.password = "Password is required.";
+      }
+    }
+
+    if (editingWorker.password) {
+      if (editingWorker.password !== confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match.";
+        newErrors.password = "Passwords do not match.";
+      }
+    }
+
+    if (!editingWorker.shift) newErrors.shift = "Shift is required.";
+    if (!editingWorker.status) newErrors.status = "Status is required.";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
+
   return (
     <>
       <PageHeader
@@ -202,21 +267,25 @@ function WorkersPage() {
         subtitle="Scanning activity and discount handling per worker."
         actions={
           <Button
-            onClick={() => setEditingWorker({
-              id: "",
-              name: "",
-              email: "",
-              phone: "",
-              shift: "Morning",
-              status: "active",
-              joinedAt: new Date().toISOString(),
-              scans: 0,
-              customersScanned: 0,
-              transactions: 0,
-              discountProcessed: 0,
-              lastActivity: new Date().toISOString(),
-              password: "",
-            })}
+            onClick={() => {
+              setErrors({});
+              setConfirmPassword("");
+              setEditingWorker({
+                id: "",
+                name: "",
+                email: "",
+                phone: "",
+                shift: "Morning",
+                status: "active",
+                joinedAt: new Date().toISOString(),
+                scans: 0,
+                customersScanned: 0,
+                transactions: 0,
+                discountProcessed: 0,
+                lastActivity: new Date().toISOString(),
+                password: "",
+              });
+            }}
           >
             <Plus className="size-4" /> New Worker
           </Button>
@@ -224,7 +293,7 @@ function WorkersPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total workers" value={formatNumber(workers.length)} icon={Wrench} />
+        <StatCard label="Total workers" value={formatNumber(augmentedWorkers.length)} icon={Wrench} />
         <StatCard
           label="Active workers"
           value={formatNumber(totals.active)}
@@ -245,7 +314,6 @@ function WorkersPage() {
         />
       </div>
 
-      {/* Full-width Worker Directory */}
       <Panel
         title="Worker directory"
         description="Search, filter and sort the team"
@@ -360,7 +428,9 @@ function WorkersPage() {
                   <Button
                     variant="outline"
                     onClick={() => {
-                      setEditingWorker(selected);
+                      setErrors({});
+                      setConfirmPassword("");
+                      setEditingWorker({ ...selected, password: "" });
                       setSelected(null);
                     }}
                   >
@@ -376,7 +446,6 @@ function WorkersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Edit Worker Dialog */}
       <Dialog open={!!editingWorker} onOpenChange={(o) => !o && setEditingWorker(null)}>
         <DialogContent className="sm:max-w-md">
           {editingWorker && (
@@ -390,84 +459,124 @@ function WorkersPage() {
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="w-name">Full name</Label>
+                    <Label htmlFor="w-name">Full name <span className="text-destructive">*</span></Label>
                     <Input
                       id="w-name"
                       placeholder="e.g. Ramesh Singh"
                       value={editingWorker.name}
-                      onChange={(e) => setEditingWorker({ ...editingWorker, name: e.target.value })}
+                      onChange={(e) => {
+                        setEditingWorker({ ...editingWorker, name: e.target.value });
+                        if (errors.name) setErrors({ ...errors, name: "" });
+                      }}
+                      className={errors.name ? "border-destructive" : ""}
                     />
+                    {errors.name && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="w-phone">Phone number</Label>
+                    <Label htmlFor="w-phone">Phone number <span className="text-destructive">*</span></Label>
                     <Input
                       id="w-phone"
                       placeholder="e.g. 9876543210"
                       value={editingWorker.phone}
-                      onChange={(e) => setEditingWorker({ ...editingWorker, phone: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setEditingWorker({ ...editingWorker, phone: val });
+                        if (errors.phone) setErrors({ ...errors, phone: "" });
+                      }}
+                      className={errors.phone ? "border-destructive" : ""}
                     />
+                    {errors.phone && <p className="mt-1 text-xs text-destructive">{errors.phone}</p>}
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="w-email">Email</Label>
+                  <Label htmlFor="w-email">Email <span className="text-destructive">*</span></Label>
                   <Input
                     id="w-email"
                     type="email"
                     placeholder="e.g. ramesh@fuelpoint.in"
                     value={editingWorker.email}
-                    onChange={(e) => setEditingWorker({ ...editingWorker, email: e.target.value })}
+                    onChange={(e) => {
+                      setEditingWorker({ ...editingWorker, email: e.target.value });
+                      if (errors.email) setErrors({ ...errors, email: "" });
+                    }}
+                    className={errors.email ? "border-destructive" : ""}
                   />
+                  {errors.email && <p className="mt-1 text-xs text-destructive">{errors.email}</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="w-password">{editingWorker.id ? "New Password" : "Password"}</Label>
+                    <Label htmlFor="w-password">
+                      {editingWorker.id ? "New Password" : "Password"}
+                      {!editingWorker.id && <span className="text-destructive"> *</span>}
+                    </Label>
                     <Input
                       id="w-password"
                       type="password"
                       placeholder={editingWorker.id ? "Leave blank to keep unchanged" : "Create password"}
                       value={editingWorker.password || ""}
-                      onChange={(e) => setEditingWorker({ ...editingWorker, password: e.target.value })}
+                      onChange={(e) => {
+                        setEditingWorker({ ...editingWorker, password: e.target.value });
+                        if (errors.password) setErrors({ ...errors, password: "" });
+                      }}
+                      className={errors.password ? "border-destructive" : ""}
                     />
+                    {errors.password && <p className="mt-1 text-xs text-destructive">{errors.password}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="w-confirm-password">Confirm Password</Label>
+                    <Label htmlFor="w-confirm-password">
+                      Confirm Password 
+                      {(!editingWorker.id || editingWorker.password) && <span className="text-destructive"> *</span>}
+                    </Label>
                     <Input
                       id="w-confirm-password"
                       type="password"
                       placeholder="Re-enter password"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: "" });
+                      }}
+                      className={errors.confirmPassword ? "border-destructive" : ""}
                     />
+                    {errors.confirmPassword && <p className="mt-1 text-xs text-destructive">{errors.confirmPassword}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Shift</Label>
+                    <Label>Shift <span className="text-destructive">*</span></Label>
                     <Select
                       value={editingWorker.shift}
-                      onValueChange={(v: "Morning" | "Evening" | "Night") => setEditingWorker({ ...editingWorker, shift: v })}
+                      onValueChange={(v: "Morning" | "Evening" | "Night") => {
+                        setEditingWorker({ ...editingWorker, shift: v });
+                        if (errors.shift) setErrors({ ...errors, shift: "" });
+                      }}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={errors.shift ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="Morning">Morning</SelectItem>
                         <SelectItem value="Evening">Evening</SelectItem>
                         <SelectItem value="Night">Night</SelectItem>
                       </SelectContent>
                     </Select>
+                    {errors.shift && <p className="mt-1 text-xs text-destructive">{errors.shift}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label>Status <span className="text-destructive">*</span></Label>
                     <Select
                       value={editingWorker.status}
-                      onValueChange={(v: "active" | "offline" | "suspended") => setEditingWorker({ ...editingWorker, status: v })}
+                      onValueChange={(v: "active" | "offline" | "suspended") => {
+                        setEditingWorker({ ...editingWorker, status: v });
+                        if (errors.status) setErrors({ ...errors, status: "" });
+                      }}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
                         <SelectItem value="offline">Offline</SelectItem>
                         <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
+                    {errors.status && <p className="mt-1 text-xs text-destructive">{errors.status}</p>}
                   </div>
                 </div>
               </div>
@@ -475,31 +584,29 @@ function WorkersPage() {
                 <Button variant="outline" onClick={() => {
                   setEditingWorker(null);
                   setConfirmPassword("");
+                  setErrors({});
                 }}>
                   Cancel
                 </Button>
                 <Button
                   disabled={isSaving}
                   onClick={async () => {
-                    if (!editingWorker.name.trim() || !editingWorker.email.trim() || !editingWorker.phone.trim()) {
-                      toast.error("Name, email, and phone are required.");
-                      return;
-                    }
-                    if (editingWorker.password && editingWorker.password !== confirmPassword) {
-                      toast.error("Passwords do not match.");
-                      return;
-                    }
+                    if (!validateForm()) return;
+                    
                     const workerToSave = { ...editingWorker };
                     setIsSaving(true);
                     try {
-                      // We don't generate ID here if it's new; the backend will
                       if (!workerToSave.id) {
                         delete (workerToSave as any).id;
+                      } else if (!workerToSave.password) {
+                        delete (workerToSave as any).password;
                       }
+                      
                       await saveWorker(workerToSave);
-                      toast.success(editingWorker.id ? "Worker updated" : "Worker created");
+                      toast.success(editingWorker.id ? "Worker updated successfully" : "Worker created successfully");
                       setEditingWorker(null);
                       setConfirmPassword("");
+                      setErrors({});
                     } catch (err: any) {
                       toast.error(err.message || "Failed to save worker");
                     } finally {
@@ -507,7 +614,7 @@ function WorkersPage() {
                     }
                   }}
                 >
-                  {isSaving ? "Saving..." : "Save changes"}
+                  {isSaving ? "Saving..." : editingWorker.id ? "Save changes" : "Create Worker"}
                 </Button>
               </div>
             </>
@@ -515,7 +622,6 @@ function WorkersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Worker Alert */}
       <AlertDialog open={!!deletingWorker} onOpenChange={(o) => !o && setDeletingWorker(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -532,12 +638,12 @@ function WorkersPage() {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
               disabled={isDeleting}
               onClick={async (e) => {
-                e.preventDefault(); // prevent auto-close if we are async
+                e.preventDefault();
                 if (deletingWorker) {
                   setIsDeleting(true);
                   try {
                     await deleteWorker(deletingWorker.id);
-                    toast.success("Worker deleted");
+                    toast.success("Worker deleted successfully");
                     setDeletingWorker(null);
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete worker");
