@@ -206,13 +206,13 @@ function DashboardPage() {
                   className="flex items-center gap-3 py-3 px-1 transition-colors hover:bg-muted/30 first:pt-1 last:pb-1"
                 >
                   <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-xs font-semibold text-primary">
-                    {t.customerName
+                    {(t.customerName || "Unknown")
                       .split(" ")
                       .map((n) => n[0])
                       .join("")}
                   </span>
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-medium text-foreground">{t.customerName}</p>
+                    <p className="truncate text-sm font-medium text-foreground">{t.customerName || "Unknown"}</p>
                     <p className="truncate text-xs text-muted-foreground">
                       {t.fuel} · {t.litres} L · scanned by {t.workerName}
                     </p>

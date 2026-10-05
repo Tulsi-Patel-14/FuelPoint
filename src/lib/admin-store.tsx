@@ -7,13 +7,13 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminService, DEFAULT_GROUP_ID } from "@/services/adminService";
+import { adminService, DEFAULT_GROUP_ID, setToken } from "@/services/adminService";
 import type { AdminProfile, Customer, Group, Notification, Transaction, Worker } from "@/services/types";
 
 interface AdminState {
   authReady: boolean;
   authed: boolean;
-  login: (email: string, remember?: boolean) => void;
+  login: (email: string, password?: string, remember?: boolean) => Promise<void>;
   logout: () => void;
   profile: AdminProfile;
   updateProfile: (patch: Partial<AdminProfile>) => void;
@@ -24,15 +24,15 @@ interface AdminState {
   notifications: Notification[];
   unreadCount: number;
   assignCustomerGroup: (customerId: string, groupId: string) => void;
-  saveGroup: (group: Omit<Group, "createdAt"> & { createdAt?: string }) => void;
-  deleteGroup: (groupId: string) => void;
-  toggleGroupActive: (groupId: string) => void;
-  markRead: (id: string) => void;
-  markAllRead: () => void;
-  saveCustomer: (customer: Customer) => void;
-  deleteCustomer: (customerId: string) => void;
-  saveWorker: (worker: Worker) => void;
-  deleteWorker: (workerId: string) => void;
+  saveGroup: (group: Omit<Group, "createdAt"> & { createdAt?: string }) => Promise<void>;
+  deleteGroup: (groupId: string) => Promise<void>;
+  toggleGroupActive: (groupId: string) => Promise<void>;
+  markRead: (id: string) => Promise<void>;
+  markAllRead: () => Promise<void>;
+  saveCustomer: (customer: Customer) => Promise<void>;
+  deleteCustomer: (customerId: string) => Promise<void>;
+  saveWorker: (worker: Worker) => Promise<void>;
+  deleteWorker: (workerId: string) => Promise<void>;
 }
 
 const AdminContext = createContext<AdminState | null>(null);
@@ -42,14 +42,27 @@ const AUTH_KEY = "fuelpoint-admin-authed";
 export function AdminProvider({ children }: { children: ReactNode }) {
   const [authReady, setAuthReady] = useState(false);
   const [authed, setAuthed] = useState(false);
-  const [profile, setProfile] = useState<AdminProfile>(() => adminService.getProfile());
-  const [customers, setCustomers] = useState<Customer[]>(() => adminService.getCustomers());
-  const [groups, setGroups] = useState<Group[]>(() => adminService.getGroups());
-  const [notifications, setNotifications] = useState<Notification[]>(() =>
-    adminService.getNotifications(),
-  );
-  const [workers, setWorkers] = useState<Worker[]>(() => adminService.getWorkers());
-  const transactions = useMemo(() => adminService.getTransactions(), []);
+  
+  const [profile, setProfile] = useState<AdminProfile>({
+    name: "Admin",
+    email: "admin@fuelpoint.com",
+    phone: "",
+    role: "Administrator",
+    location: "",
+    joinedAt: new Date().toISOString(),
+    initials: "A",
+  });
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [groups, setGroups] = useState<Group[]>([]);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [workers, setWorkers] = useState<Worker[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+
+  const logout = useCallback(() => {
+    setAuthed(false);
+    setToken("");
+    if (typeof window !== "undefined") sessionStorage.removeItem(AUTH_KEY);
+  }, []);
 
   // Restore the session after a page refresh (client-side only).
   useEffect(() => {
@@ -57,7 +70,56 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setAuthReady(true);
   }, []);
 
-  const login = useCallback((email: string, remember: boolean = true) => {
+  useEffect(() => {
+    if (!authed) return;
+    const loadData = async () => {
+      try {
+        const catchError = (err: any) => {
+          if (err.message?.includes("401")) logout();
+          return null;
+        };
+
+        const results = await Promise.all([
+          adminService.getProfile().catch(catchError),
+          adminService.getCustomers().catch(catchError),
+          adminService.getGroups().catch(catchError),
+          adminService.getNotifications().catch(catchError),
+          adminService.getWorkers().catch(catchError),
+          adminService.getTransactions().catch(catchError)
+        ]);
+        
+        setProfile(results[0] || {} as any);
+        setCustomers(results[1] || []);
+        setGroups(results[2] || []);
+        setNotifications(results[3] || []);
+        setWorkers(results[4] || []);
+        
+        const rawTx = results[5];
+        if (rawTx && rawTx.data && Array.isArray(rawTx.data)) {
+          setTransactions(rawTx.data);
+        } else if (Array.isArray(rawTx)) {
+          setTransactions(rawTx);
+        } else {
+          setTransactions([]);
+        }
+      } catch (err: any) {
+        console.error("Failed to load admin data", err);
+        if (err.message?.includes("401")) {
+          logout();
+        }
+      }
+    };
+    loadData();
+  }, [authed, logout]);
+
+  const login = useCallback(async (email: string, password?: string, remember: boolean = true) => {
+    // Call real API
+    const data = await adminService.login(email, password);
+    
+    // Store real JWT in localStorage (where fetchApi expects it)
+    setToken(data.token);
+
+    // Update UI state
     setAuthed(true);
     setProfile((p) => ({ ...p, email: email || p.email }));
     if (typeof window !== "undefined") {
@@ -69,10 +131,6 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
-  const logout = useCallback(() => {
-    setAuthed(false);
-    if (typeof window !== "undefined") sessionStorage.removeItem(AUTH_KEY);
-  }, []);
 
   const assignCustomerGroup = useCallback(
     (customerId: string, groupId: string) => {
@@ -95,50 +153,101 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     [groups],
   );
 
-  const saveGroup: AdminState["saveGroup"] = useCallback((group) => {
-    setGroups((prev) => {
-      const exists = prev.some((g) => g.id === group.id);
-      if (exists) return prev.map((g) => (g.id === group.id ? { ...g, ...group } : g));
-      return [...prev, { ...group, createdAt: group.createdAt ?? new Date().toISOString() }];
-    });
-  }, []);
+  const saveGroup: AdminState["saveGroup"] = useCallback(async (group) => {
+    try {
+      const isNew = !group.id;
+      const savedGroup = isNew ? await adminService.createGroup(group) : await adminService.updateGroup(group.id, group);
+      setGroups((prev) => {
+        const exists = prev.some((g) => g.id === savedGroup.id);
+        if (exists) return prev.map((g) => (g.id === savedGroup.id ? { ...g, ...savedGroup } : g));
+        return [...prev, savedGroup];
+      });
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const deleteGroup = useCallback((groupId: string) => {
-    setGroups((prev) => prev.filter((g) => g.id !== groupId));
-    setCustomers((prev) =>
-      prev.map((c) =>
-        c.groupId === groupId ? { ...c, groupId: DEFAULT_GROUP_ID, discountReceived: 0 } : c,
-      ),
-    );
-  }, []);
+  const deleteGroup = useCallback(async (groupId: string) => {
+    try {
+      await adminService.deleteGroup(groupId);
+      setGroups((prev) => prev.filter((g) => g.id !== groupId));
+      setCustomers((prev) =>
+        prev.map((c) =>
+          c.groupId === groupId ? { ...c, groupId: DEFAULT_GROUP_ID, discountReceived: 0 } : c,
+        ),
+      );
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const toggleGroupActive = useCallback((groupId: string) => {
-    setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, active: !g.active } : g)));
-  }, []);
+  const toggleGroupActive = useCallback(async (groupId: string) => {
+    try {
+      const updatedGroup = await adminService.toggleGroupActive(groupId);
+      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updatedGroup } : g)));
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const saveCustomer = useCallback((customer: Customer) => {
-    setCustomers((prev) => {
-      const exists = prev.some((c) => c.id === customer.id);
-      if (exists) return prev.map((c) => (c.id === customer.id ? customer : c));
-      return [...prev, customer];
-    });
-  }, []);
+  const saveCustomer = useCallback(async (customer: Customer) => {
+    try {
+      const isNew = !customer.id;
+      const savedCustomer = isNew ? await adminService.createCustomer(customer) : await adminService.updateCustomer(customer.id, customer);
+      setCustomers((prev) => {
+        const exists = prev.some((c) => c.id === savedCustomer.id);
+        if (exists) return prev.map((c) => (c.id === savedCustomer.id ? savedCustomer : c));
+        return [...prev, savedCustomer];
+      });
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const deleteCustomer = useCallback((customerId: string) => {
-    setCustomers((prev) => prev.filter((c) => c.id !== customerId));
-  }, []);
+  const deleteCustomer = useCallback(async (customerId: string) => {
+    try {
+      await adminService.deleteCustomer(customerId);
+      setCustomers((prev) => prev.filter((c) => c.id !== customerId));
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const saveWorker = useCallback((worker: Worker) => {
-    setWorkers((prev) => {
-      const exists = prev.some((w) => w.id === worker.id);
-      if (exists) return prev.map((w) => (w.id === worker.id ? worker : w));
-      return [...prev, worker];
-    });
-  }, []);
+  const saveWorker = useCallback(async (worker: Worker) => {
+    try {
+      const isNew = !worker.id;
+      let savedWorker: Worker;
+      if (isNew) {
+        savedWorker = await adminService.createWorker(worker);
+      } else {
+        savedWorker = await adminService.updateWorker(worker.id, worker);
+      }
+      
+      setWorkers((prev) => {
+        const exists = prev.some((w) => w.id === savedWorker.id);
+        if (exists) return prev.map((w) => (w.id === savedWorker.id ? savedWorker : w));
+        return [...prev, savedWorker];
+      });
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
-  const deleteWorker = useCallback((workerId: string) => {
-    setWorkers((prev) => prev.filter((w) => w.id !== workerId));
-  }, []);
+  const deleteWorker = useCallback(async (workerId: string) => {
+    try {
+      await adminService.deleteWorker(workerId);
+      setWorkers((prev) => prev.filter((w) => w.id !== workerId));
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
 
   const value: AdminState = {
     authReady,
@@ -152,14 +261,29 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     groups,
     transactions,
     notifications,
-    unreadCount: notifications.filter((n) => !n.read).length,
+    // @ts-ignore
+    _debug: console.log("NOTIFICATIONS VALUE:", notifications),
+    unreadCount: Array.isArray(notifications) ? notifications.filter((n) => !n?.read).length : 0,
     assignCustomerGroup,
     saveGroup,
     deleteGroup,
     toggleGroupActive,
-    markRead: (id) =>
-      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n))),
-    markAllRead: () => setNotifications((prev) => prev.map((n) => ({ ...n, read: true }))),
+    markRead: async (id) => {
+      try {
+        await adminService.markNotificationRead(id);
+        setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
+      } catch (err) {
+        console.error("Failed to mark notification read", err);
+      }
+    },
+    markAllRead: async () => {
+      try {
+        await adminService.markAllNotificationsRead();
+        setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
+      } catch (err) {
+        console.error("Failed to mark all notifications read", err);
+      }
+    },
     saveCustomer,
     deleteCustomer,
     saveWorker,

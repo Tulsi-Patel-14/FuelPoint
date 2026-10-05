@@ -45,17 +45,20 @@ function LoginPage() {
   const [forgot, setForgot] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || password.length < 4) {
       toast.error("Enter a valid email and a password of at least 4 characters.");
       return;
     }
     setLoading(true);
-    setTimeout(() => {
-      login(email.trim(), remember);
+    try {
+      await login(email.trim(), password, remember);
       navigate({ to: "/dashboard" });
-    }, 600);
+    } catch (err: any) {
+      toast.error(err.message || "Failed to sign in");
+      setLoading(false);
+    }
   };
 
   return (

@@ -87,9 +87,9 @@ function CustomersPage() {
         (c) =>
           (groupFilter === "all" || c.groupId === groupFilter) &&
           (statusFilter === "all" || c.status === statusFilter) &&
-          (c.name.toLowerCase().includes(query.toLowerCase()) ||
-            c.phone.includes(query) ||
-            c.id.toLowerCase().includes(query.toLowerCase())),
+          ((c.name || "Unknown").toLowerCase().includes(query.toLowerCase()) ||
+            String(c.phone || "").includes(query) ||
+            String(c.id || "").toLowerCase().includes(query.toLowerCase())),
       ),
     [customers, query, groupFilter, statusFilter],
   );

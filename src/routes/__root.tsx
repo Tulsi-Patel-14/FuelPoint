@@ -44,14 +44,18 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   }, [error]);
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="max-w-md text-center">
+    <div className="flex min-h-screen flex-col items-center justify-center bg-background px-4">
+      <div className="max-w-2xl text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
           This page didn't load
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">
           Something went wrong on our end. You can try refreshing or head back home.
         </p>
+        <div className="mt-4 p-4 bg-red-950/20 text-red-500 text-left overflow-auto text-xs rounded border border-red-900/50 break-words">
+          <strong>{error?.name}: {error?.message}</strong>
+          <pre className="mt-2 whitespace-pre-wrap">{error?.stack}</pre>
+        </div>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -127,6 +131,19 @@ function RootShell({ children }: { children: ReactNode }) {
 
 function RootComponent() {
   const { queryClient } = Route.useRouteContext();
+
+  useEffect(() => {
+    const originalFetch = window.fetch;
+    window.fetch = async (...args) => {
+      const [resource, config] = args;
+      console.log('--- FETCH INTERCEPTED ---');
+      console.log('URL:', resource);
+      console.log('Method:', config?.method || 'GET');
+      console.log('Headers:', config?.headers);
+      return originalFetch(...args);
+    };
+    return () => { window.fetch = originalFetch; };
+  }, []);
 
   return (
     <QueryClientProvider client={queryClient}>

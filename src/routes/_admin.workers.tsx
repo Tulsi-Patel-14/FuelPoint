@@ -69,7 +69,9 @@ function WorkersPage() {
   
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
   const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filtered = useMemo(
     () =>
@@ -477,7 +479,8 @@ function WorkersPage() {
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
+                  disabled={isSaving}
+                  onClick={async () => {
                     if (!editingWorker.name.trim() || !editingWorker.email.trim() || !editingWorker.phone.trim()) {
                       toast.error("Name, email, and phone are required.");
                       return;
@@ -487,16 +490,24 @@ function WorkersPage() {
                       return;
                     }
                     const workerToSave = { ...editingWorker };
-                    if (!workerToSave.id) {
-                      workerToSave.id = `wrk-${Date.now()}`;
+                    setIsSaving(true);
+                    try {
+                      // We don't generate ID here if it's new; the backend will
+                      if (!workerToSave.id) {
+                        delete (workerToSave as any).id;
+                      }
+                      await saveWorker(workerToSave);
+                      toast.success(editingWorker.id ? "Worker updated" : "Worker created");
+                      setEditingWorker(null);
+                      setConfirmPassword("");
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to save worker");
+                    } finally {
+                      setIsSaving(false);
                     }
-                    saveWorker(workerToSave);
-                    toast.success(editingWorker.id ? "Worker updated" : "Worker created");
-                    setEditingWorker(null);
-                    setConfirmPassword("");
                   }}
                 >
-                  Save changes
+                  {isSaving ? "Saving..." : "Save changes"}
                 </Button>
               </div>
             </>
@@ -516,18 +527,27 @@ function WorkersPage() {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+              disabled={isDeleting}
+              onClick={async (e) => {
+                e.preventDefault(); // prevent auto-close if we are async
                 if (deletingWorker) {
-                  deleteWorker(deletingWorker.id);
-                  toast.success("Worker deleted");
-                  setDeletingWorker(null);
+                  setIsDeleting(true);
+                  try {
+                    await deleteWorker(deletingWorker.id);
+                    toast.success("Worker deleted");
+                    setDeletingWorker(null);
+                  } catch (err: any) {
+                    toast.error(err.message || "Failed to delete worker");
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }
               }}
             >
-              Delete worker
+              {isDeleting ? "Deleting..." : "Delete worker"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
