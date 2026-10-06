@@ -34,6 +34,7 @@ interface AdminState {
   saveWorker: (worker: Worker) => Promise<void>;
   deleteWorker: (workerId: string) => Promise<void>;
   getCustomers: (params?: CustomerQueryParams) => Promise<Customer[]>;
+  getGroups: () => Promise<Group[]>;
 }
 
 const AdminContext = createContext<AdminState | null>(null);
@@ -133,13 +134,27 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, []);
 
 
+  const getGroups = useCallback(async () => {
+    try {
+      const fresh = await adminService.getGroups();
+      setGroups(fresh);
+      return fresh;
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
+
   const assignCustomerGroup = useCallback(
     async (customerId: string, groupId: string) => {
       try {
-        const updated = await adminService.updateCustomer(customerId, { groupId });
-        setCustomers((prev) =>
-          prev.map((c) => (c.id === customerId ? updated : c))
-        );
+        await adminService.updateCustomer(customerId, { groupId });
+        const [freshCustomers, freshGroups] = await Promise.all([
+          adminService.getCustomers({ all: true }),
+          adminService.getGroups(),
+        ]);
+        setCustomers(freshCustomers);
+        setGroups(freshGroups);
         setNotifications((prev) =>
           prev.map((n) => (n.customerId === customerId ? { ...n, read: true } : n)),
         );
@@ -154,12 +169,16 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const saveGroup: AdminState["saveGroup"] = useCallback(async (group) => {
     try {
       const isNew = !group.id;
-      const savedGroup = isNew ? await adminService.createGroup(group) : await adminService.updateGroup(group.id, group);
-      setGroups((prev) => {
-        const exists = prev.some((g) => g.id === savedGroup.id);
-        if (exists) return prev.map((g) => (g.id === savedGroup.id ? { ...g, ...savedGroup } : g));
-        return [...prev, savedGroup];
-      });
+      let savedGroup: Group;
+      if (isNew) {
+        const payload = { ...group };
+        delete (payload as any).id;
+        savedGroup = await adminService.createGroup(payload);
+      } else {
+        savedGroup = await adminService.updateGroup(group.id, group);
+      }
+      const freshGroups = await adminService.getGroups();
+      setGroups(freshGroups);
     } catch (err: any) {
       if (err.message?.includes("401")) logout();
       throw err;
@@ -169,12 +188,12 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const deleteGroup = useCallback(async (groupId: string) => {
     try {
       await adminService.deleteGroup(groupId);
-      setGroups((prev) => prev.filter((g) => g.id !== groupId));
-      setCustomers((prev) =>
-        prev.map((c) =>
-          c.groupId === groupId ? { ...c, groupId: DEFAULT_GROUP_ID, discountReceived: 0 } : c,
-        ),
-      );
+      const [freshGroups, freshCustomers] = await Promise.all([
+        adminService.getGroups(),
+        adminService.getCustomers({ all: true }),
+      ]);
+      setGroups(freshGroups);
+      setCustomers(freshCustomers);
     } catch (err: any) {
       if (err.message?.includes("401")) logout();
       throw err;
@@ -183,8 +202,9 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
   const toggleGroupActive = useCallback(async (groupId: string) => {
     try {
-      const updatedGroup = await adminService.toggleGroupActive(groupId);
-      setGroups((prev) => prev.map((g) => (g.id === groupId ? { ...g, ...updatedGroup } : g)));
+      await adminService.toggleGroupActive(groupId);
+      const freshGroups = await adminService.getGroups();
+      setGroups(freshGroups);
     } catch (err: any) {
       if (err.message?.includes("401")) logout();
       throw err;
@@ -300,6 +320,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     saveWorker,
     deleteWorker,
     getCustomers,
+    getGroups,
   };
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;

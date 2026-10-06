@@ -9,6 +9,10 @@ export interface Group {
   active: boolean;
   createdAt: string;
   isDefault?: boolean;
+  isDeleted?: boolean;
+  customersCount?: number;
+  transactionsCount?: number;
+  discountGenerated?: number;
 }
 
 export interface Customer {

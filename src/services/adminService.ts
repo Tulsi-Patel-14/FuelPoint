@@ -141,6 +141,36 @@ export const adminService = {
     return json.data;
   },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
+  getGroupsRaw: async (): Promise<{ success: boolean; data: Group[]; stats?: any }> => fetchApiRaw('/groups'),
+  createGroup: async (group: Partial<Group>): Promise<Group> => {
+    return fetchApi('/groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: group.name,
+        discountPercent: Number(group.discountPercent),
+        description: group.description,
+        isDefault: group.isDefault,
+      }),
+    });
+  },
+  updateGroup: async (id: string, group: Partial<Group>): Promise<Group> => {
+    return fetchApi(`/groups/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        name: group.name,
+        discountPercent: group.discountPercent !== undefined ? Number(group.discountPercent) : undefined,
+        description: group.description,
+        isDefault: group.isDefault,
+        active: group.active,
+      }),
+    });
+  },
+  toggleGroupActive: async (id: string): Promise<Group> => {
+    return fetchApi(`/groups/${id}/toggle`, { method: 'PATCH' });
+  },
+  deleteGroup: async (id: string): Promise<void> => {
+    await fetchApi(`/groups/${id}`, { method: 'DELETE' });
+  },
   getCustomers: async (params?: CustomerQueryParams): Promise<Customer[]> => {
     const query = new URLSearchParams();
     if (params?.all) query.set('all', 'true');
