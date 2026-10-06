@@ -308,11 +308,15 @@ function GroupsPage() {
                 </Button>
                 <Button
                   disabled={!assignCustomer}
-                  onClick={() => {
-                    assignCustomerGroup(assignCustomer, assignTarget.id);
-                    toast.success("Customer assigned", { description: assignTarget.name });
-                    setAssignCustomer("");
-                    setAssignTarget(null);
+                  onClick={async () => {
+                    try {
+                      await assignCustomerGroup(assignCustomer, assignTarget.id);
+                      toast.success("Customer assigned", { description: assignTarget.name });
+                      setAssignCustomer("");
+                      setAssignTarget(null);
+                    } catch (err: any) {
+                      toast.error("Failed to assign customer", { description: err.message });
+                    }
                   }}
                 >
                   Assign

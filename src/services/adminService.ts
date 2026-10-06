@@ -52,6 +52,44 @@ const mapWorker = (w: any): Worker => ({
   lastActivity: w.lastActivity || w.joinedAt || new Date().toISOString(),
 });
 
+const mapCustomer = (c: any): Customer => {
+  let lastAct = c.lastActivity || c.joinedAt || null;
+  if (c.transactions && c.transactions.length > 0) {
+    const sorted = [...c.transactions].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    lastAct = sorted[0].createdAt;
+  }
+  return {
+    id: c.id,
+    name: c.fullName || "Unknown",
+    email: c.user?.email || "",
+    phone: c.user?.mobile || "",
+    vehicle: c.vehicle || "",
+    groupId: c.groupId || DEFAULT_GROUP_ID,
+    status: (c.user?.status?.toLowerCase() || "active") as any,
+    registeredAt: c.joinedAt || new Date().toISOString(),
+    lastActivity: lastAct,
+    transactions: c.transactions?.length || 0,
+    totalSpend: c.transactions?.reduce((sum: number, t: any) => sum + (t.finalAmount || t.amount || 0), 0) || 0,
+    discountReceived: c.transactions?.reduce((sum: number, t: any) => sum + (t.discountAmount || 0), 0) || 0,
+    transactionsList: c.transactions || [],
+  };
+};
+
+const mapCustomerPayload = (data: Partial<Customer>) => {
+  const payload: any = {
+    fullName: data.name,
+    mobile: data.phone,
+    email: data.email,
+    vehicle: data.vehicle,
+    groupId: data.groupId === DEFAULT_GROUP_ID ? null : data.groupId,
+    status: data.status?.toUpperCase(),
+  };
+  if (data.password) {
+    payload.password = data.password;
+  }
+  return payload;
+};
+
 export const adminService = {
   login: async (email: string, password?: string): Promise<{ token: string }> => {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -64,10 +102,19 @@ export const adminService = {
     return json.data;
   },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
-  getCustomers: async (): Promise<Customer[]> => fetchApi('/customers'),
-  getWorkers: async (): Promise<Worker[]> => fetchApi('/workers'),
-  createWorker: async (worker: Partial<Worker>): Promise<Worker> => fetchApi('/workers', { method: 'POST', body: JSON.stringify(worker) }),
-  updateWorker: async (id: string, worker: Partial<Worker>): Promise<Worker> => fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(worker) }),
+  getCustomers: async (): Promise<Customer[]> => {
+    const raw = await fetchApi('/customers');
+    return raw.map(mapCustomer);
+  },
+  createCustomer: async (customer: Partial<Customer>): Promise<Customer> => {
+    const raw = await fetchApi('/customers', { method: 'POST', body: JSON.stringify(mapCustomerPayload(customer)) });
+    return mapCustomer(raw);
+  },
+  updateCustomer: async (id: string, customer: Partial<Customer>): Promise<Customer> => {
+    const raw = await fetchApi(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(mapCustomerPayload(customer)) });
+    return mapCustomer(raw);
+  },
+  deleteCustomer: async (id: string): Promise<void> => fetchApi(`/customers/${id}`, { method: 'DELETE' }),
   getWorkers: async (): Promise<Worker[]> => {
     const raw = await fetchApi('/workers');
     return raw.map(mapWorker);
@@ -94,10 +141,10 @@ export { DEFAULT_GROUP_ID };
 
 /* ---------- formatting helpers ---------- */
 
-export const formatCurrency = (value: number) =>
-  `₹${Math.round(value).toLocaleString("en-IN")}`;
+export const formatCurrency = (value: number | null | undefined) =>
+  `₹${Math.round(value || 0).toLocaleString("en-IN")}`;
 
-export const formatNumber = (value: number) => value.toLocaleString("en-IN");
+export const formatNumber = (value: number | null | undefined) => (value || 0).toLocaleString("en-IN");
 
 export const formatDate = (value: string | null) =>
   value

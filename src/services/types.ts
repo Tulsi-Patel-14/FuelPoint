@@ -25,6 +25,7 @@ export interface Customer {
   discountReceived: number;
   status: "active" | "inactive" | "pending";
   password?: string;
+  transactionsList?: any[];
 }
 
 export interface Worker {

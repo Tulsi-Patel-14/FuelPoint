@@ -23,7 +23,7 @@ interface AdminState {
   transactions: Transaction[];
   notifications: Notification[];
   unreadCount: number;
-  assignCustomerGroup: (customerId: string, groupId: string) => void;
+  assignCustomerGroup: (customerId: string, groupId: string) => Promise<void>;
   saveGroup: (group: Omit<Group, "createdAt"> & { createdAt?: string }) => Promise<void>;
   deleteGroup: (groupId: string) => Promise<void>;
   toggleGroupActive: (groupId: string) => Promise<void>;
@@ -133,24 +133,21 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
 
   const assignCustomerGroup = useCallback(
-    (customerId: string, groupId: string) => {
-      setCustomers((prev) =>
-        prev.map((c) => {
-          if (c.id !== customerId) return c;
-          const g = groups.find((x) => x.id === groupId);
-          return {
-            ...c,
-            groupId,
-            status: groupId === DEFAULT_GROUP_ID ? c.status : c.transactions > 0 ? "active" : c.status,
-            discountReceived: Math.round((c.totalSpend * (g?.discountPercent ?? 0)) / 100),
-          };
-        }),
-      );
-      setNotifications((prev) =>
-        prev.map((n) => (n.customerId === customerId ? { ...n, read: true } : n)),
-      );
+    async (customerId: string, groupId: string) => {
+      try {
+        const updated = await adminService.updateCustomer(customerId, { groupId });
+        setCustomers((prev) =>
+          prev.map((c) => (c.id === customerId ? updated : c))
+        );
+        setNotifications((prev) =>
+          prev.map((n) => (n.customerId === customerId ? { ...n, read: true } : n)),
+        );
+      } catch (err: any) {
+        if (err.message?.includes("401")) logout();
+        throw err;
+      }
     },
-    [groups],
+    [logout],
   );
 
   const saveGroup: AdminState["saveGroup"] = useCallback(async (group) => {

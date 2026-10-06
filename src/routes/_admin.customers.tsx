@@ -86,31 +86,9 @@ function CustomersPage() {
   const groupName = (id: string) => groups.find((g) => g.id === id)?.name ?? "Unassigned";
   const groupPercent = (id: string) => groups.find((g) => g.id === id)?.discountPercent ?? 0;
 
-  const augmentedCustomers = useMemo(() => {
-    return customers.map((c) => {
-      const cTxns = transactions.filter(t => t.customerId === c.id && t.status === "COMPLETED");
-      const discount = cTxns.reduce((sum, t) => sum + (t.discountAmount || 0), 0);
-      const spend = cTxns.reduce((sum, t) => sum + (t.finalAmount || 0), 0);
-      
-      let lastAct = c.lastActivity;
-      if (cTxns.length > 0) {
-        const sorted = [...cTxns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-        lastAct = sorted[0].createdAt;
-      }
-
-      return {
-        ...c,
-        transactions: cTxns.length,
-        discountReceived: discount,
-        totalSpend: spend,
-        lastActivity: lastAct
-      };
-    });
-  }, [customers, transactions]);
-
   const filtered = useMemo(
     () =>
-      augmentedCustomers.filter(
+      customers.filter(
         (c) =>
           (groupFilter === "all" || c.groupId === groupFilter) &&
           (statusFilter === "all" || c.status === statusFilter) &&
@@ -118,12 +96,12 @@ function CustomersPage() {
             String(c.phone || "").includes(query) ||
             String(c.id || "").toLowerCase().includes(query.toLowerCase())),
       ),
-    [augmentedCustomers, query, groupFilter, statusFilter],
+    [customers, query, groupFilter, statusFilter],
   );
 
-  const selected = augmentedCustomers.find((c) => c.id === selectedId) ?? null;
-  const selectedTxns = selected
-    ? transactions.filter((t) => t.customerId === selected.id).slice(0, 8)
+  const selected = customers.find((c) => c.id === selectedId) ?? null;
+  const selectedTxns = selected && selected.transactionsList
+    ? selected.transactionsList.slice(0, 8)
     : [];
 
   const columns: Column<Customer>[] = [
@@ -320,7 +298,7 @@ function CustomersPage() {
         />
         <StatCard
           label="Used the pump"
-          value={formatNumber(overview.usedPump30d)}
+          value={formatNumber(overview.usedPumpCustomers)}
           icon={Fuel}
           tone="navy"
           hint="last 30 days"
@@ -361,6 +339,8 @@ function CustomersPage() {
               <SelectItem value="active">Active</SelectItem>
               <SelectItem value="pending">Pending</SelectItem>
               <SelectItem value="inactive">Inactive</SelectItem>
+              <SelectItem value="offline">Offline</SelectItem>
+              <SelectItem value="suspended">Suspended</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -608,7 +588,7 @@ function CustomersPage() {
                     <Label>Status <span className="text-destructive">*</span></Label>
                     <Select
                       value={editingCustomer.status}
-                      onValueChange={(v: "active" | "inactive" | "pending") => {
+                      onValueChange={(v: "active" | "inactive" | "pending" | "offline" | "suspended") => {
                         setEditingCustomer({ ...editingCustomer, status: v });
                         if (errors.status) setErrors({ ...errors, status: "" });
                       }}
@@ -618,6 +598,8 @@ function CustomersPage() {
                         <SelectItem value="active">Active</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="offline">Offline</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.status && <p className="mt-1 text-xs text-destructive">{errors.status}</p>}
