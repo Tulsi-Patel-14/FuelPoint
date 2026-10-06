@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminService, DEFAULT_GROUP_ID, setToken } from "@/services/adminService";
+import { adminService, DEFAULT_GROUP_ID, setToken, type CustomerQueryParams } from "@/services/adminService";
 import type { AdminProfile, Customer, Group, Notification, Transaction, Worker } from "@/services/types";
 
 interface AdminState {
@@ -33,6 +33,7 @@ interface AdminState {
   deleteCustomer: (customerId: string) => Promise<void>;
   saveWorker: (worker: Worker) => Promise<void>;
   deleteWorker: (workerId: string) => Promise<void>;
+  getCustomers: (params?: CustomerQueryParams) => Promise<Customer[]>;
 }
 
 const AdminContext = createContext<AdminState | null>(null);
@@ -81,7 +82,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
 
         const results = await Promise.all([
           adminService.getProfile().catch(catchError),
-          adminService.getCustomers().catch(catchError),
+          adminService.getCustomers({ all: true }).catch(catchError),
           adminService.getGroups().catch(catchError),
           adminService.getNotifications().catch(catchError),
           adminService.getWorkers().catch(catchError),
@@ -246,6 +247,19 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [logout]);
 
+  const getCustomers = useCallback(async (params?: CustomerQueryParams) => {
+    try {
+      const data = await adminService.getCustomers(params);
+      if (!params || params.all) {
+        setCustomers(data);
+      }
+      return data;
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
+
   const value: AdminState = {
     authReady,
     authed,
@@ -285,6 +299,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     deleteCustomer,
     saveWorker,
     deleteWorker,
+    getCustomers,
   };
 
   return <AdminContext.Provider value={value}>{children}</AdminContext.Provider>;

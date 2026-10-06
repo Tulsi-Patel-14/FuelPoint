@@ -116,12 +116,23 @@ export function DataTable<T extends { id: string }>({
   pageSize = 10,
   emptyMessage = "No records match the current filters.",
   onRowClick,
+  serverPagination,
+  isLoading,
 }: {
   rows: T[];
   columns: Column<T>[];
   pageSize?: number;
   emptyMessage?: string;
   onRowClick?: (row: T) => void;
+  serverPagination?: {
+    currentPage: number;
+    totalPages: number;
+    pageSize: number;
+    totalItems: number;
+    onPageChange: (page: number) => void;
+    onPageSizeChange: (size: number) => void;
+  };
+  isLoading?: boolean;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
@@ -144,9 +155,11 @@ export function DataTable<T extends { id: string }>({
     });
   }, [rows, sort, columns]);
 
-  const totalPages = Math.max(1, Math.ceil(sorted.length / actualPageSize));
-  const safePage = Math.min(page, totalPages);
-  const slice = sorted.slice((safePage - 1) * actualPageSize, safePage * actualPageSize);
+  const totalPages = serverPagination ? serverPagination.totalPages : Math.max(1, Math.ceil(sorted.length / actualPageSize));
+  const safePage = serverPagination ? serverPagination.currentPage : Math.min(page, totalPages);
+  const slice = serverPagination ? rows : sorted.slice((safePage - 1) * actualPageSize, safePage * actualPageSize);
+  const totalCount = serverPagination ? serverPagination.totalItems : sorted.length;
+  const curPageSize = serverPagination ? serverPagination.pageSize : actualPageSize;
 
   const toggleSort = (key: string) =>
     setSort((prev) =>
@@ -154,7 +167,7 @@ export function DataTable<T extends { id: string }>({
     );
 
   return (
-    <div>
+    <div className={cn("relative", isLoading && "opacity-60 transition-opacity")}>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] border-collapse text-sm">
           <thead>
@@ -226,12 +239,12 @@ export function DataTable<T extends { id: string }>({
       <TablePagination
         currentPage={safePage}
         totalPages={totalPages}
-        pageSize={actualPageSize}
+        pageSize={curPageSize}
         pageSizeOptions={Array.from(new Set([pageSize, 10, 25, 50, 100])).sort((a, b) => a - b)}
-        totalItems={sorted.length}
+        totalItems={totalCount}
         currentCount={slice.length}
-        onPageChange={setPage}
-        onPageSizeChange={setActualPageSize}
+        onPageChange={serverPagination ? serverPagination.onPageChange : setPage}
+        onPageSizeChange={serverPagination ? serverPagination.onPageSizeChange : setActualPageSize}
       />
     </div>
   );

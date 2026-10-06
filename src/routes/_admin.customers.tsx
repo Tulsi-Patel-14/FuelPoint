@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Fuel, Search, UserPlus, Users, UserCheck, Pencil, Trash2, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Column, DataTable } from "@/components/admin/DataTable";
 import { GroupPill, PageHeader, Panel, StatCard, StatusBadge } from "@/components/admin/primitives";
@@ -34,6 +34,7 @@ import {
 import { useAdmin } from "@/lib/admin-store";
 import {
   DEFAULT_GROUP_ID,
+  adminService,
   buildOverview,
   exportCsv,
   formatCurrency,
@@ -41,6 +42,7 @@ import {
   formatDateTime,
   formatNumber,
   relativeDays,
+  type Pagination,
 } from "@/services/adminService";
 import type { Customer } from "@/services/types";
 
@@ -66,8 +68,19 @@ export const Route = createFileRoute("/_admin/customers")({
 function CustomersPage() {
   const { customers, groups, transactions, workers, saveCustomer, deleteCustomer, getCustomers } = useAdmin();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [tableCustomers, setTableCustomers] = useState<Customer[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
@@ -78,6 +91,44 @@ function CustomersPage() {
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 350);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Reset page to 1 on filter or search change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, groupFilter, statusFilter]);
+
+  // Fetch paginated customers from backend
+  const fetchTableCustomers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await adminService.getCustomersPaginated({
+        page,
+        limit,
+        search: debouncedQuery.trim() || undefined,
+        groupId: groupFilter !== "all" ? groupFilter : undefined,
+        status: statusFilter !== "all" ? statusFilter : undefined,
+      });
+      setTableCustomers(res.customers);
+      setPagination(res.pagination);
+    } catch (err: any) {
+      console.error("Failed to fetch customers:", err);
+      toast.error(err.message || "Failed to load customers");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, limit, debouncedQuery, groupFilter, statusFilter]);
+
+  useEffect(() => {
+    fetchTableCustomers();
+  }, [fetchTableCustomers]);
+
   const overview = useMemo(
     () => buildOverview(customers, workers, groups, transactions),
     [customers, workers, groups, transactions],
@@ -86,20 +137,7 @@ function CustomersPage() {
   const groupName = (id: string) => groups.find((g) => g.id === id)?.name ?? "Unassigned";
   const groupPercent = (id: string) => groups.find((g) => g.id === id)?.discountPercent ?? 0;
 
-  const filtered = useMemo(
-    () =>
-      customers.filter(
-        (c) =>
-          (groupFilter === "all" || c.groupId === groupFilter) &&
-          (statusFilter === "all" || c.status === statusFilter) &&
-          ((c.name || "Unknown").toLowerCase().includes(query.toLowerCase()) ||
-            String(c.phone || "").includes(query) ||
-            String(c.id || "").toLowerCase().includes(query.toLowerCase())),
-      ),
-    [customers, query, groupFilter, statusFilter],
-  );
-
-  const selected = customers.find((c) => c.id === selectedId) ?? null;
+  const selected = (tableCustomers.find((c) => c.id === selectedId) || customers.find((c) => c.id === selectedId)) ?? null;
   const selectedTxns = selected && selected.transactionsList
     ? selected.transactionsList.slice(0, 8)
     : [];
@@ -236,21 +274,31 @@ function CustomersPage() {
           <div className="flex items-center gap-2">
             <Button
               variant="outline"
-              onClick={() =>
-                exportCsv(
-                  "customers.csv",
-                  filtered.map((c) => ({
-                    ID: c.id,
-                    Name: c.name,
-                    Phone: c.phone,
-                    Group: groupName(c.groupId),
-                    Registered: formatDate(c.registeredAt),
-                    Transactions: c.transactions,
-                    Discount: c.discountReceived,
-                    Status: c.status,
-                  })),
-                )
-              }
+              onClick={async () => {
+                try {
+                  const exportList = await adminService.getCustomers({
+                    search: debouncedQuery.trim() || undefined,
+                    groupId: groupFilter !== "all" ? groupFilter : undefined,
+                    status: statusFilter !== "all" ? statusFilter : undefined,
+                    all: true,
+                  });
+                  exportCsv(
+                    "customers.csv",
+                    exportList.map((c) => ({
+                      ID: c.id,
+                      Name: c.name,
+                      Phone: c.phone,
+                      Group: groupName(c.groupId),
+                      Registered: formatDate(c.registeredAt),
+                      Transactions: c.transactions,
+                      Discount: c.discountReceived,
+                      Status: c.status,
+                    })),
+                  );
+                } catch (err: any) {
+                  toast.error("Failed to export customers");
+                }
+              }}
             >
               Export CSV
             </Button>
@@ -344,7 +392,24 @@ function CustomersPage() {
             </SelectContent>
           </Select>
         </div>
-        <DataTable rows={filtered} columns={columns} pageSize={10} onRowClick={(c) => setSelectedId(c.id)} />
+        <DataTable
+          rows={tableCustomers}
+          columns={columns}
+          pageSize={limit}
+          isLoading={isLoading}
+          serverPagination={{
+            currentPage: pagination.page,
+            totalPages: pagination.totalPages,
+            pageSize: pagination.limit,
+            totalItems: pagination.total,
+            onPageChange: (p) => setPage(p),
+            onPageSizeChange: (s) => {
+              setLimit(s);
+              setPage(1);
+            },
+          }}
+          onRowClick={(c) => setSelectedId(c.id)}
+        />
       </Panel>
 
       <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
@@ -633,7 +698,8 @@ function CustomersPage() {
                       setEditingCustomer(null);
                       setConfirmPassword("");
                       setErrors({});
-                      if (getCustomers) await getCustomers();
+                      if (getCustomers) await getCustomers({ all: true });
+                      await fetchTableCustomers();
                     } catch (err: any) {
                       toast.error(err.message || "Failed to save customer");
                     } finally {
@@ -672,6 +738,8 @@ function CustomersPage() {
                     await deleteCustomer(deletingCustomer.id);
                     toast.success("Customer deleted successfully");
                     setDeletingCustomer(null);
+                    if (getCustomers) await getCustomers({ all: true });
+                    await fetchTableCustomers();
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete customer");
                   } finally {

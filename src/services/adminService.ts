@@ -8,7 +8,7 @@ import type {
 } from "./types";
 import { DEFAULT_GROUP_ID } from "./types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:5000/api/v1/admin';
+const API_BASE_URL = (import.meta.env as any).VITE_API_BASE_URL || 'http://localhost:5000/api/v1/admin';
 
 export const setToken = (newToken: string) => {
   if (typeof window !== 'undefined' && typeof localStorage !== 'undefined') {
@@ -16,7 +16,28 @@ export const setToken = (newToken: string) => {
   }
 };
 
-const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
+export interface CustomerQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  groupId?: string;
+  status?: string;
+  all?: boolean;
+}
+
+export interface Pagination {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface PaginatedCustomers {
+  customers: Customer[];
+  pagination: Pagination;
+}
+
+const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
   const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
   
   const headers = new Headers(options.headers);
@@ -32,7 +53,11 @@ const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
     headers,
   });
   if (!response.ok) throw new Error(`API Error: ${response.status} - ${await response.text()}`);
-  const json = await response.json();
+  return await response.json();
+};
+
+const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
+  const json = await fetchApiRaw(endpoint, options);
   console.log("FETCH API:", endpoint, typeof json.data, Array.isArray(json.data));
   return json.data;
 };
@@ -90,6 +115,20 @@ const mapCustomerPayload = (data: Partial<Customer>) => {
   return payload;
 };
 
+const mapWorkerPayload = (data: Partial<Worker>) => {
+  const payload: any = {
+    fullName: data.name,
+    mobile: data.phone,
+    email: data.email,
+    shift: data.shift,
+    status: data.status?.toUpperCase(),
+  };
+  if (data.password) {
+    payload.password = data.password;
+  }
+  return payload;
+};
+
 export const adminService = {
   login: async (email: string, password?: string): Promise<{ token: string }> => {
     const response = await fetch(`${API_BASE_URL}/auth/login`, {
@@ -102,9 +141,39 @@ export const adminService = {
     return json.data;
   },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
-  getCustomers: async (): Promise<Customer[]> => {
-    const raw = await fetchApi('/customers');
-    return raw.map(mapCustomer);
+  getCustomers: async (params?: CustomerQueryParams): Promise<Customer[]> => {
+    const query = new URLSearchParams();
+    if (params?.all) query.set('all', 'true');
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.search) query.set('search', params.search);
+    if (params?.groupId && params.groupId !== 'all') query.set('groupId', params.groupId);
+    if (params?.status && params.status !== 'all') query.set('status', params.status);
+
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const raw = await fetchApi(`/customers${qStr}`);
+    return Array.isArray(raw) ? raw.map(mapCustomer) : (raw?.data ? raw.data.map(mapCustomer) : []);
+  },
+  getCustomersPaginated: async (params?: CustomerQueryParams): Promise<PaginatedCustomers> => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.search) query.set('search', params.search);
+    if (params?.groupId && params.groupId !== 'all') query.set('groupId', params.groupId);
+    if (params?.status && params.status !== 'all') query.set('status', params.status);
+
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const json = await fetchApiRaw(`/customers${qStr}`);
+    const items = Array.isArray(json.data) ? json.data.map(mapCustomer) : [];
+    return {
+      customers: items,
+      pagination: json.pagination || {
+        page: params?.page || 1,
+        limit: params?.limit || 10,
+        total: items.length,
+        totalPages: 1
+      }
+    };
   },
   createCustomer: async (customer: Partial<Customer>): Promise<Customer> => {
     const raw = await fetchApi('/customers', { method: 'POST', body: JSON.stringify(mapCustomerPayload(customer)) });
@@ -120,11 +189,11 @@ export const adminService = {
     return raw.map(mapWorker);
   },
   createWorker: async (worker: Partial<Worker>): Promise<Worker> => {
-    const raw = await fetchApi('/workers', { method: 'POST', body: JSON.stringify(worker) });
+    const raw = await fetchApi('/workers', { method: 'POST', body: JSON.stringify(mapWorkerPayload(worker)) });
     return mapWorker(raw);
   },
   updateWorker: async (id: string, worker: Partial<Worker>): Promise<Worker> => {
-    const raw = await fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(worker) });
+    const raw = await fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(mapWorkerPayload(worker)) });
     return mapWorker(raw);
   },
   deleteWorker: async (id: string): Promise<void> => fetchApi(`/workers/${id}`, { method: 'DELETE' }),
