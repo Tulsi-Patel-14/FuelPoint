@@ -16,7 +16,7 @@ export const setToken = (newToken: string) => {
   }
 };
 
-const fetchApi = async (endpoint: string, options: RequestInit & { raw?: boolean } = {}) => {
+const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
   const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
   
   const headers = new Headers(options.headers);
@@ -33,8 +33,8 @@ const fetchApi = async (endpoint: string, options: RequestInit & { raw?: boolean
   });
   if (!response.ok) throw new Error(`API Error: ${response.status} - ${await response.text()}`);
   const json = await response.json();
-  if (options.raw) return json;
-  return json.data !== undefined ? json.data : json;
+  console.log("FETCH API:", endpoint, typeof json.data, Array.isArray(json.data));
+  return json.data;
 };
 
 const mapWorker = (w: any): Worker => ({
@@ -64,46 +64,28 @@ export const adminService = {
     return json.data;
   },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
-  createGroup: async (g: Partial<Group>): Promise<Group> => fetchApi('/groups', { method: 'POST', body: JSON.stringify(g) }),
-  updateGroup: async (id: string, g: Partial<Group>): Promise<Group> => fetchApi(`/groups/${id}`, { method: 'PUT', body: JSON.stringify(g) }),
-  toggleGroupActive: async (id: string): Promise<Group> => fetchApi(`/groups/${id}/toggle`, { method: 'PATCH' }),
-  deleteGroup: async (id: string): Promise<void> => fetchApi(`/groups/${id}`, { method: 'DELETE' }),
-  getCustomers: async (): Promise<Customer[]> => {
-    const res = await fetchApi('/customers');
-    return Array.isArray(res) ? res : (res?.data ?? []);
-  },
-  createCustomer: async (c: Partial<Customer>): Promise<Customer> => fetchApi('/customers', { method: 'POST', body: JSON.stringify(c) }),
-  updateCustomer: async (id: string, c: Partial<Customer>): Promise<Customer> => fetchApi(`/customers/${id}`, { method: 'PUT', body: JSON.stringify(c) }),
-  deleteCustomer: async (id: string): Promise<void> => fetchApi(`/customers/${id}`, { method: 'DELETE' }),
+  getCustomers: async (): Promise<Customer[]> => fetchApi('/customers'),
+  getWorkers: async (): Promise<Worker[]> => fetchApi('/workers'),
+  createWorker: async (worker: Partial<Worker>): Promise<Worker> => fetchApi('/workers', { method: 'POST', body: JSON.stringify(worker) }),
+  updateWorker: async (id: string, worker: Partial<Worker>): Promise<Worker> => fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(worker) }),
   getWorkers: async (): Promise<Worker[]> => {
     const raw = await fetchApi('/workers');
-    const workers = Array.isArray(raw) ? raw : (raw?.data ?? []);
-    return workers.map(mapWorker);
+    return raw.map(mapWorker);
   },
   createWorker: async (worker: Partial<Worker>): Promise<Worker> => {
-    const payload = { ...worker, fullName: worker.name, mobile: worker.phone };
-    const raw = await fetchApi('/workers', { method: 'POST', body: JSON.stringify(payload) });
+    const raw = await fetchApi('/workers', { method: 'POST', body: JSON.stringify(worker) });
     return mapWorker(raw);
   },
   updateWorker: async (id: string, worker: Partial<Worker>): Promise<Worker> => {
-    const payload = { ...worker, fullName: worker.name, mobile: worker.phone };
-    const raw = await fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(payload) });
+    const raw = await fetchApi(`/workers/${id}`, { method: 'PUT', body: JSON.stringify(worker) });
     return mapWorker(raw);
   },
   deleteWorker: async (id: string): Promise<void> => fetchApi(`/workers/${id}`, { method: 'DELETE' }),
-  getTransactions: async (params?: Record<string, any>): Promise<any> => {
-    const query = new URLSearchParams(params || {}).toString();
-    const res = await fetchApi(`/transactions${query ? '?' + query : ''}`, { raw: true });
-    return res;
+  getTransactions: async (): Promise<Transaction[]> => {
+    const res = await fetchApi('/transactions');
+    return res.data || res; // handle pagination structure if applicable
   },
   getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
-  markNotificationRead: async (id: string): Promise<void> => fetchApi(`/notifications/${id}/read`, { method: 'PATCH' }),
-  markAllNotificationsRead: async (): Promise<void> => fetchApi('/notifications/mark-all-read', { method: 'POST' }),
-  getDashboard: async (): Promise<any> => fetchApi('/dashboard'),
-  getReportSummary: async (params?: Record<string, any>): Promise<any> => {
-    const query = new URLSearchParams(params || {}).toString();
-    return fetchApi(`/reports/summary${query ? '?' + query : ''}`);
-  },
   getProfile: async () => fetchApi('/profile'),
   getToday: () => new Date(),
 };
@@ -112,10 +94,10 @@ export { DEFAULT_GROUP_ID };
 
 /* ---------- formatting helpers ---------- */
 
-export const formatCurrency = (value?: number | null) =>
-  `₹${Math.round(value || 0).toLocaleString("en-IN")}`;
+export const formatCurrency = (value: number) =>
+  `₹${Math.round(value).toLocaleString("en-IN")}`;
 
-export const formatNumber = (value?: number | null) => (value || 0).toLocaleString("en-IN");
+export const formatNumber = (value: number) => value.toLocaleString("en-IN");
 
 export const formatDate = (value: string | null) =>
   value
@@ -146,7 +128,7 @@ export const relativeDays = (value: string | null) => {
   return `${Math.floor(diff / 30)} mo ago`;
 };
 
-const dayKey = (value: string | null | undefined) => value ? String(value).slice(0, 10) : '';
+const dayKey = (value: string) => value.slice(0, 10);
 export const todayKey = () => TODAY.toISOString().slice(0, 10);
 
 /* ---------- analytics ---------- */
@@ -186,10 +168,8 @@ export function buildOverview(
     totalDiscount,
     totalRevenue,
     todayTransactions: transactions.filter((t) => dayKey(t.createdAt) === tk).length,
-    todayTransactions: transactions.filter((t) => t.createdAt && dayKey(t.createdAt) === tk).length,
     todayDiscount: transactions
       .filter((t) => dayKey(t.createdAt) === tk)
-      .filter((t) => t.createdAt && dayKey(t.createdAt) === tk)
       .reduce((s, t) => s + (t.discountAmount || 0), 0),
     newRegistrations7d: customers.filter(
       (c) => TODAY.getTime() - new Date(c.registeredAt).getTime() <= 7 * 86400000,

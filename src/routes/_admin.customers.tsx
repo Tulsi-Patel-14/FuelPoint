@@ -64,7 +64,7 @@ export const Route = createFileRoute("/_admin/customers")({
 });
 
 function CustomersPage() {
-  const { customers, groups, transactions, workers, assignCustomerGroup, saveCustomer, deleteCustomer } = useAdmin();
+  const { customers, groups, transactions, workers, saveCustomer, deleteCustomer, getCustomers } = useAdmin();
   const [query, setQuery] = useState("");
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
@@ -72,18 +72,45 @@ function CustomersPage() {
   
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
+  
+  const [isSaving, setIsSaving] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const overview = useMemo(
     () => buildOverview(customers, workers, groups, transactions),
     [customers, workers, groups, transactions],
   );
+  
   const groupName = (id: string) => groups.find((g) => g.id === id)?.name ?? "Unassigned";
   const groupPercent = (id: string) => groups.find((g) => g.id === id)?.discountPercent ?? 0;
 
+  const augmentedCustomers = useMemo(() => {
+    return customers.map((c) => {
+      const cTxns = transactions.filter(t => t.customerId === c.id && t.status === "COMPLETED");
+      const discount = cTxns.reduce((sum, t) => sum + (t.discountAmount || 0), 0);
+      const spend = cTxns.reduce((sum, t) => sum + (t.finalAmount || 0), 0);
+      
+      let lastAct = c.lastActivity;
+      if (cTxns.length > 0) {
+        const sorted = [...cTxns].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        lastAct = sorted[0].createdAt;
+      }
+
+      return {
+        ...c,
+        transactions: cTxns.length,
+        discountReceived: discount,
+        totalSpend: spend,
+        lastActivity: lastAct
+      };
+    });
+  }, [customers, transactions]);
+
   const filtered = useMemo(
     () =>
-      customers.filter(
+      augmentedCustomers.filter(
         (c) =>
           (groupFilter === "all" || c.groupId === groupFilter) &&
           (statusFilter === "all" || c.status === statusFilter) &&
@@ -91,10 +118,10 @@ function CustomersPage() {
             String(c.phone || "").includes(query) ||
             String(c.id || "").toLowerCase().includes(query.toLowerCase())),
       ),
-    [customers, query, groupFilter, statusFilter],
+    [augmentedCustomers, query, groupFilter, statusFilter],
   );
 
-  const selected = customers.find((c) => c.id === selectedId) ?? null;
+  const selected = augmentedCustomers.find((c) => c.id === selectedId) ?? null;
   const selectedTxns = selected
     ? transactions.filter((t) => t.customerId === selected.id).slice(0, 8)
     : [];
@@ -107,9 +134,7 @@ function CustomersPage() {
       render: (c) => (
         <div>
           <p className="font-medium text-foreground">{c.name}</p>
-          <p className="text-xs text-muted-foreground">
-            {c.phone} · {c.id}
-          </p>
+          <p className="text-xs text-muted-foreground">{c.phone}</p>
         </div>
       ),
     },
@@ -156,7 +181,7 @@ function CustomersPage() {
     },
     {
       key: "actions",
-      header: "",
+      header: "Actions",
       align: "right",
       render: (c) => (
         <div className="flex items-center justify-end gap-1" onClick={(e) => e.stopPropagation()}>
@@ -164,7 +189,11 @@ function CustomersPage() {
             variant="ghost"
             size="icon"
             className="size-8"
-            onClick={() => setEditingCustomer(c)}
+            onClick={() => {
+              setErrors({});
+              setConfirmPassword("");
+              setEditingCustomer({ ...c, password: "" });
+            }}
           >
             <Pencil className="size-4" />
           </Button>
@@ -180,6 +209,45 @@ function CustomersPage() {
       ),
     },
   ];
+
+  const validateForm = () => {
+    if (!editingCustomer) return false;
+    const newErrors: Record<string, string> = {};
+    
+    if (!editingCustomer.name.trim()) newErrors.name = "Full name is required.";
+    
+    if (!editingCustomer.phone) {
+      newErrors.phone = "Phone number is required.";
+    } else if (editingCustomer.phone.length !== 10) {
+      newErrors.phone = "Phone number must be exactly 10 digits.";
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!editingCustomer.email.trim()) {
+      newErrors.email = "Email is required.";
+    } else if (!emailRegex.test(editingCustomer.email.trim())) {
+      newErrors.email = "Enter a valid email address.";
+    }
+
+    if (!editingCustomer.id) {
+      if (!editingCustomer.password) {
+        newErrors.password = "Password is required.";
+      }
+    }
+
+    if (editingCustomer.password) {
+      if (editingCustomer.password !== confirmPassword) {
+        newErrors.confirmPassword = "Passwords do not match.";
+        newErrors.password = "Passwords do not match.";
+      }
+    }
+
+    if (!editingCustomer.groupId) newErrors.groupId = "Group Assignment is required.";
+    if (!editingCustomer.status) newErrors.status = "Status is required.";
+
+    setErrors(newErrors);
+    return Object.keys(newErrors).length === 0;
+  };
 
   return (
     <>
@@ -209,21 +277,25 @@ function CustomersPage() {
               Export CSV
             </Button>
             <Button
-              onClick={() => setEditingCustomer({
-                id: "",
-                name: "",
-                phone: "",
-                email: "",
-                vehicle: "",
-                groupId: DEFAULT_GROUP_ID,
-                status: "active",
-                registeredAt: new Date().toISOString(),
-                lastActivity: null,
-                transactions: 0,
-                totalSpend: 0,
-                discountReceived: 0,
-                password: "",
-              })}
+              onClick={() => {
+                setErrors({});
+                setConfirmPassword("");
+                setEditingCustomer({
+                  id: "",
+                  name: "",
+                  phone: "",
+                  email: "",
+                  vehicle: "",
+                  groupId: DEFAULT_GROUP_ID,
+                  status: "active",
+                  registeredAt: new Date().toISOString(),
+                  lastActivity: null,
+                  transactions: 0,
+                  totalSpend: 0,
+                  discountReceived: 0,
+                  password: "",
+                });
+              }}
             >
               <Plus className="size-4" /> New Customer
             </Button>
@@ -248,30 +320,28 @@ function CustomersPage() {
         />
         <StatCard
           label="Used the pump"
-          value={formatNumber(overview.usedPumpCustomers)}
+          value={formatNumber(overview.usedPump30d)}
           icon={Fuel}
           tone="navy"
-          hint={`${overview.unassignedCustomers} awaiting group`}
+          hint="last 30 days"
         />
       </div>
 
-      <Panel
-        title="Customer directory"
-        description="Click a row to open the customer profile and activity"
-        className="mt-6"
-      >
-        <div className="mb-4 flex flex-wrap items-center gap-2">
+      <Panel title="Customer directory" description="Search and filter the customer base" className="mt-6">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <div className="flex min-w-56 flex-1 items-center gap-2 rounded-lg border border-border px-3 py-2">
             <Search className="size-4 text-muted-foreground" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search by name, phone or customer ID"
-              className="w-full bg-transparent text-sm outline-none"
+              placeholder="Search by name, phone or ID"
+              className="w-full bg-transparent text-sm outline-none placeholder:text-muted-foreground"
             />
           </div>
           <Select value={groupFilter} onValueChange={setGroupFilter}>
-            <SelectTrigger className="w-48"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All groups</SelectItem>
               {groups.map((g) => (
@@ -279,10 +349,13 @@ function CustomersPage() {
                   {g.name}
                 </SelectItem>
               ))}
+              <SelectItem value={DEFAULT_GROUP_ID}>Unassigned</SelectItem>
             </SelectContent>
           </Select>
           <Select value={statusFilter} onValueChange={setStatusFilter}>
-            <SelectTrigger className="w-40"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-36">
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
@@ -291,59 +364,43 @@ function CustomersPage() {
             </SelectContent>
           </Select>
         </div>
-
-        <DataTable
-          rows={filtered}
-          columns={columns}
-          pageSize={10}
-          onRowClick={(c) => setSelectedId(c.id)}
-        />
+        <DataTable rows={filtered} columns={columns} pageSize={10} onRowClick={(c) => setSelectedId(c.id)} />
       </Panel>
 
-      <Dialog open={!!selected} onOpenChange={(o) => !o && setSelectedId(null)}>
+      <Dialog open={!!selectedId} onOpenChange={(o) => !o && setSelectedId(null)}>
         <DialogContent className="sm:max-w-xl">
           {selected && (
             <>
               <DialogHeader>
-                <div className="flex items-start justify-between pr-6">
-                  <div>
-                    <DialogTitle>{selected.name}</DialogTitle>
-                    <DialogDescription>
-                      {selected.email} · {selected.id} · {selected.phone} · {selected.vehicle}
-                    </DialogDescription>
+                <div className="flex items-center gap-4">
+                  <div className="gradient-brand flex size-12 shrink-0 items-center justify-center rounded-full font-bold text-primary-foreground">
+                    {selected.name
+                      .split(" ")
+                      .map((n) => n[0])
+                      .join("")
+                      .substring(0, 2)}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8"
-                      title="Edit customer"
-                      onClick={() => {
-                        setEditingCustomer(selected);
-                        setSelectedId(null);
-                      }}
-                    >
-                      <Pencil className="size-4" />
-                    </Button>
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="size-8 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      title="Delete customer"
-                      onClick={() => {
-                        setDeletingCustomer(selected);
-                        setSelectedId(null);
-                      }}
-                    >
-                      <Trash2 className="size-4" />
-                    </Button>
+                  <div>
+                    <DialogTitle className="text-xl">{selected.name}</DialogTitle>
+                    <DialogDescription>
+                      {selected.phone} · {selected.email} · {selected.vehicle}
+                    </DialogDescription>
                   </div>
                 </div>
               </DialogHeader>
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4 mt-2">
+              <div className="mt-2 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                <div className="rounded-lg border border-border bg-muted/40 p-3">
+                  <p className="text-xs text-muted-foreground">Group</p>
+                  <div className="mt-1">
+                    {selected.groupId === DEFAULT_GROUP_ID ? (
+                      <span className="text-sm font-semibold text-warning">Unassigned</span>
+                    ) : (
+                      <GroupPill name={groupName(selected.groupId)} percent={groupPercent(selected.groupId)} />
+                    )}
+                  </div>
+                </div>
                 {[
-                  ["Registered", formatDate(selected.registeredAt)],
                   ["Transactions", formatNumber(selected.transactions)],
                   ["Total spend", formatCurrency(selected.totalSpend)],
                   ["Discount", formatCurrency(selected.discountReceived)],
@@ -355,166 +412,215 @@ function CustomersPage() {
                 ))}
               </div>
 
-              <div className="rounded-lg border border-border p-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase">
-                  Discount group
-                </p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
-                  <Select
-                    value={selected.groupId}
-                    onValueChange={(v) => {
-                      assignCustomerGroup(selected.id, v);
-                      toast.success("Group updated", {
-                        description: `${selected.name} moved to ${groupName(v)}.`,
-                      });
-                    }}
-                  >
-                    <SelectTrigger className="w-60"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {groups
-                        .filter((g) => g.active || g.id === selected.groupId)
-                        .map((g) => (
-                          <SelectItem key={g.id} value={g.id}>
-                            {g.name} — {g.discountPercent}%
-                          </SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                  <StatusBadge status={selected.status} />
-                </div>
-              </div>
-
               <div className="rounded-lg border border-border">
                 <p className="border-b border-border px-4 py-2.5 text-xs font-semibold text-muted-foreground uppercase">
                   Recent activity
                 </p>
-                <ul className="scrollbar-thin max-h-56 divide-y divide-border overflow-y-auto">
+                <ul className="scrollbar-thin max-h-64 divide-y divide-border overflow-y-auto">
                   {selectedTxns.map((t) => (
-                    <li key={t.id} className="flex items-center justify-between px-4 py-2.5 text-sm">
+                    <li
+                      key={t.id}
+                      className="flex items-center justify-between gap-3 px-4 py-2.5 text-sm"
+                    >
                       <span>
-                        {t.fuel} · {t.litres} L
+                        <span className="font-medium text-foreground">{(t as any).fuelType || (t as any).fuel}</span>
                         <span className="block text-xs text-muted-foreground">
-                          {formatDateTime(t.createdAt)} · {t.workerName}
+                          {formatDateTime(t.createdAt)} &middot; {t.litres}L &middot; {(t as any).worker?.fullName || (t as any).workerName}
                         </span>
                       </span>
                       <span className="text-right">
-                        {formatCurrency(t.amount)}
-                        <span className="block text-xs text-teal">
+                        <span className="font-medium">{formatCurrency((t as any).finalAmount || t.amount)}</span>
+                        <span className="block text-xs font-medium text-teal">
                           −{formatCurrency(t.discountAmount)}
                         </span>
                       </span>
                     </li>
                   ))}
                   {selectedTxns.length === 0 && (
-                    <li className="px-4 py-6 text-center text-sm text-muted-foreground">
+                    <li className="px-4 py-8 text-center text-sm text-muted-foreground">
                       This customer hasn't fuelled yet.
                     </li>
                   )}
                 </ul>
               </div>
+
+              <div className="flex items-center justify-between gap-3">
+                <StatusBadge status={selected.status} />
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    onClick={() => {
+                      setDeletingCustomer(selected);
+                      setSelectedId(null);
+                    }}
+                  >
+                    Delete
+                  </Button>
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setErrors({});
+                      setConfirmPassword("");
+                      setEditingCustomer({ ...selected, password: "" });
+                      setSelectedId(null);
+                    }}
+                  >
+                    Edit
+                  </Button>
+                  <Button variant="default" onClick={() => setSelectedId(null)}>
+                    Close
+                  </Button>
+                </div>
+              </div>
             </>
           )}
         </DialogContent>
       </Dialog>
-      {/* Edit Customer Dialog */}
-      <Dialog open={!!editingCustomer} onOpenChange={(o) => {
-        if (!o) {
-          setEditingCustomer(null);
-          setConfirmPassword("");
-        }
-      }}>
+
+      <Dialog open={!!editingCustomer} onOpenChange={(o) => !o && setEditingCustomer(null)}>
         <DialogContent className="sm:max-w-md">
           {editingCustomer && (
             <>
               <DialogHeader>
                 <DialogTitle>{editingCustomer.id ? "Edit Customer" : "Create Customer"}</DialogTitle>
-                <DialogDescription>
-                  Update contact details or manually override customer status.
-                </DialogDescription>
+                <DialogDescription>Update basic info and group assignment.</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="c-name">Full name</Label>
+                    <Label htmlFor="c-name">Full name <span className="text-destructive">*</span></Label>
                     <Input
                       id="c-name"
-                      placeholder="e.g. Anil Kumar"
+                      placeholder="e.g. Ramesh Singh"
                       value={editingCustomer.name}
-                      onChange={(e) => setEditingCustomer({ ...editingCustomer, name: e.target.value })}
+                      onChange={(e) => {
+                        setEditingCustomer({ ...editingCustomer, name: e.target.value });
+                        if (errors.name) setErrors({ ...errors, name: "" });
+                      }}
+                      className={errors.name ? "border-destructive" : ""}
                     />
+                    {errors.name && <p className="mt-1 text-xs text-destructive">{errors.name}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="c-phone">Phone number</Label>
+                    <Label htmlFor="c-phone">Phone number <span className="text-destructive">*</span></Label>
                     <Input
                       id="c-phone"
                       placeholder="e.g. 9876543210"
                       value={editingCustomer.phone}
-                      onChange={(e) => setEditingCustomer({ ...editingCustomer, phone: e.target.value })}
+                      onChange={(e) => {
+                        const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                        setEditingCustomer({ ...editingCustomer, phone: val });
+                        if (errors.phone) setErrors({ ...errors, phone: "" });
+                      }}
+                      className={errors.phone ? "border-destructive" : ""}
                     />
+                    {errors.phone && <p className="mt-1 text-xs text-destructive">{errors.phone}</p>}
                   </div>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="c-email">Email</Label>
-                  <Input
-                    id="c-email"
-                    type="email"
-                    placeholder="e.g. anil@example.com"
-                    value={editingCustomer.email}
-                    onChange={(e) => setEditingCustomer({ ...editingCustomer, email: e.target.value })}
-                  />
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="c-password">{editingCustomer.id ? "New Password" : "Password"}</Label>
+                    <Label htmlFor="c-email">Email <span className="text-destructive">*</span></Label>
+                    <Input
+                      id="c-email"
+                      type="email"
+                      placeholder="e.g. ramesh@gmail.com"
+                      value={editingCustomer.email}
+                      onChange={(e) => {
+                        setEditingCustomer({ ...editingCustomer, email: e.target.value });
+                        if (errors.email) setErrors({ ...errors, email: "" });
+                      }}
+                      className={errors.email ? "border-destructive" : ""}
+                    />
+                    {errors.email && <p className="mt-1 text-xs text-destructive">{errors.email}</p>}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="c-vehicle">Vehicle</Label>
+                    <Input
+                      id="c-vehicle"
+                      placeholder="e.g. GJ01AB1234"
+                      value={editingCustomer.vehicle}
+                      onChange={(e) => setEditingCustomer({ ...editingCustomer, vehicle: e.target.value })}
+                    />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="c-password">
+                      {editingCustomer.id ? "New Password" : "Password"}
+                      {!editingCustomer.id && <span className="text-destructive"> *</span>}
+                    </Label>
                     <Input
                       id="c-password"
                       type="password"
                       placeholder={editingCustomer.id ? "Leave blank to keep unchanged" : "Create password"}
                       value={editingCustomer.password || ""}
-                      onChange={(e) => setEditingCustomer({ ...editingCustomer, password: e.target.value })}
+                      onChange={(e) => {
+                        setEditingCustomer({ ...editingCustomer, password: e.target.value });
+                        if (errors.password) setErrors({ ...errors, password: "" });
+                      }}
+                      className={errors.password ? "border-destructive" : ""}
                     />
+                    {errors.password && <p className="mt-1 text-xs text-destructive">{errors.password}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label htmlFor="c-confirm-password">Confirm Password</Label>
+                    <Label htmlFor="c-confirm-password">
+                      Confirm Password 
+                      {(!editingCustomer.id || editingCustomer.password) && <span className="text-destructive"> *</span>}
+                    </Label>
                     <Input
                       id="c-confirm-password"
                       type="password"
                       placeholder="Re-enter password"
                       value={confirmPassword}
-                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      onChange={(e) => {
+                        setConfirmPassword(e.target.value);
+                        if (errors.confirmPassword) setErrors({ ...errors, confirmPassword: "" });
+                      }}
+                      className={errors.confirmPassword ? "border-destructive" : ""}
                     />
+                    {errors.confirmPassword && <p className="mt-1 text-xs text-destructive">{errors.confirmPassword}</p>}
                   </div>
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label>Group Assignment</Label>
+                    <Label>Group Assignment <span className="text-destructive">*</span></Label>
                     <Select
                       value={editingCustomer.groupId}
-                      onValueChange={(v) => setEditingCustomer({ ...editingCustomer, groupId: v })}
+                      onValueChange={(v) => {
+                        setEditingCustomer({ ...editingCustomer, groupId: v });
+                        if (errors.groupId) setErrors({ ...errors, groupId: "" });
+                      }}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={errors.groupId ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {groups.filter(g => g.active || g.id === editingCustomer.groupId).map((g) => (
+                        {groups.map((g) => (
                           <SelectItem key={g.id} value={g.id}>
                             {g.name}
                           </SelectItem>
                         ))}
+                        <SelectItem value={DEFAULT_GROUP_ID}>Unassigned</SelectItem>
                       </SelectContent>
                     </Select>
+                    {errors.groupId && <p className="mt-1 text-xs text-destructive">{errors.groupId}</p>}
                   </div>
                   <div className="space-y-2">
-                    <Label>Status</Label>
+                    <Label>Status <span className="text-destructive">*</span></Label>
                     <Select
                       value={editingCustomer.status}
-                      onValueChange={(v: "active" | "inactive" | "pending") => setEditingCustomer({ ...editingCustomer, status: v })}
+                      onValueChange={(v: "active" | "inactive" | "pending") => {
+                        setEditingCustomer({ ...editingCustomer, status: v });
+                        if (errors.status) setErrors({ ...errors, status: "" });
+                      }}
                     >
-                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
                         <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
                       </SelectContent>
                     </Select>
+                    {errors.status && <p className="mt-1 text-xs text-destructive">{errors.status}</p>}
                   </div>
                 </div>
               </div>
@@ -522,30 +628,38 @@ function CustomersPage() {
                 <Button variant="outline" onClick={() => {
                   setEditingCustomer(null);
                   setConfirmPassword("");
+                  setErrors({});
                 }}>
                   Cancel
                 </Button>
                 <Button
-                  onClick={() => {
-                    if (!editingCustomer.name.trim() || !editingCustomer.email.trim() || !editingCustomer.phone.trim()) {
-                      toast.error("Name, email, and phone are required.");
-                      return;
-                    }
-                    if (editingCustomer.password && editingCustomer.password !== confirmPassword) {
-                      toast.error("Passwords do not match.");
-                      return;
-                    }
+                  disabled={isSaving}
+                  onClick={async () => {
+                    if (!validateForm()) return;
+                    
                     const customerToSave = { ...editingCustomer };
-                    if (!customerToSave.id) {
-                      customerToSave.id = `cus-${Date.now()}`;
+                    setIsSaving(true);
+                    try {
+                      if (!customerToSave.id) {
+                        delete (customerToSave as any).id;
+                      } else if (!customerToSave.password) {
+                        delete (customerToSave as any).password;
+                      }
+                      
+                      await saveCustomer(customerToSave);
+                      toast.success(editingCustomer.id ? "Customer updated successfully" : "Customer created successfully");
+                      setEditingCustomer(null);
+                      setConfirmPassword("");
+                      setErrors({});
+                      if (getCustomers) await getCustomers();
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to save customer");
+                    } finally {
+                      setIsSaving(false);
                     }
-                    saveCustomer(customerToSave);
-                    toast.success(editingCustomer.id ? "Customer updated" : "Customer created");
-                    setEditingCustomer(null);
-                    setConfirmPassword("");
                   }}
                 >
-                  Save changes
+                  {isSaving ? "Saving..." : editingCustomer.id ? "Save changes" : "Create Customer"}
                 </Button>
               </div>
             </>
@@ -553,29 +667,38 @@ function CustomersPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Customer Alert */}
       <AlertDialog open={!!deletingCustomer} onOpenChange={(o) => !o && setDeletingCustomer(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Are you absolutely sure?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete the customer account for{" "}
-              <span className="font-semibold text-foreground">{deletingCustomer?.name}</span>. This action cannot be undone.
+              This will safely remove the customer profile for{" "}
+              <span className="font-semibold text-foreground">{deletingCustomer?.name}</span>.
+              They will no longer be able to log in, but historical transactions remain.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeleting}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-              onClick={() => {
+              disabled={isDeleting}
+              onClick={async (e) => {
+                e.preventDefault();
                 if (deletingCustomer) {
-                  deleteCustomer(deletingCustomer.id);
-                  toast.success("Customer deleted");
-                  setDeletingCustomer(null);
+                  setIsDeleting(true);
+                  try {
+                    await deleteCustomer(deletingCustomer.id);
+                    toast.success("Customer deleted successfully");
+                    setDeletingCustomer(null);
+                  } catch (err: any) {
+                    toast.error(err.message || "Failed to delete customer");
+                  } finally {
+                    setIsDeleting(false);
+                  }
                 }
               }}
             >
-              Delete customer
+              {isDeleting ? "Deleting..." : "Delete customer"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
