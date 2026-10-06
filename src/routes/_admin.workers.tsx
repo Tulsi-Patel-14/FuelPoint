@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { Activity, BadgePercent, Search, UserCheck, Wrench, Pencil, Trash2, Plus } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { HorizontalBarChart } from "@/components/admin/charts";
 import { Column, DataTable } from "@/components/admin/DataTable";
 import { PageHeader, Panel, StatCard, StatusBadge } from "@/components/admin/primitives";
@@ -39,6 +39,8 @@ import {
   formatDateTime,
   formatNumber,
   relativeDays,
+  adminService,
+  type Pagination,
 } from "@/services/adminService";
 import type { Worker } from "@/services/types";
 
@@ -61,10 +63,25 @@ export const Route = createFileRoute("/_admin/workers")({
 });
 
 function WorkersPage() {
-  const { workers, transactions, saveWorker, deleteWorker } = useAdmin();
+  const { workers, transactions, saveWorker, deleteWorker, getWorkers } = useAdmin();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
   const [status, setStatus] = useState("all");
   const [shift, setShift] = useState("all");
+  const [sortConfig, setSortConfig] = useState<{ key: string; dir: "asc" | "desc" } | null>({
+    key: "joinedAt",
+    dir: "desc",
+  });
+  const [page, setPage] = useState(1);
+  const [limit, setLimit] = useState(10);
+  const [tableWorkers, setTableWorkers] = useState<Worker[]>([]);
+  const [pagination, setPagination] = useState<Pagination>({
+    page: 1,
+    limit: 10,
+    total: 0,
+    totalPages: 1,
+  });
+  const [isLoading, setIsLoading] = useState(false);
   const [selected, setSelected] = useState<Worker | null>(null);
   
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
@@ -75,11 +92,51 @@ function WorkersPage() {
   const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
+  // Debounce search query with 3 seconds delay
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedQuery(query);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [query]);
+
+  // Reset page to 1 on filter or search change
+  useEffect(() => {
+    setPage(1);
+  }, [debouncedQuery, status, shift]);
+
+  // Fetch paginated workers from backend
+  const fetchTableWorkers = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const res = await adminService.getWorkersPaginated({
+        page,
+        limit,
+        search: debouncedQuery.trim() || undefined,
+        status: status !== "all" ? status : undefined,
+        shift: shift !== "all" ? shift : undefined,
+        sortBy: sortConfig?.key || "joinedAt",
+        sortOrder: sortConfig?.dir || "desc",
+      });
+      setTableWorkers(res.workers);
+      setPagination(res.pagination);
+    } catch (err: any) {
+      console.error("Failed to fetch workers:", err);
+      toast.error(err.message || "Failed to load workers");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [page, limit, debouncedQuery, status, shift, sortConfig]);
+
+  useEffect(() => {
+    fetchTableWorkers();
+  }, [fetchTableWorkers]);
+
   const augmentedWorkers = useMemo(() => {
     return workers.map((w) => {
-      const wTxns = transactions.filter(t => t.workerId === w.id);
+      const wTxns = transactions.filter((t) => t.workerId === w.id);
       const discount = wTxns.reduce((sum, t) => sum + (t.discountAmount || 0), 0);
-      const customers = new Set(wTxns.map(t => t.customerId)).size;
+      const customers = new Set(wTxns.map((t) => t.customerId)).size;
       
       let lastAct = w.lastActivity;
       if (wTxns.length > 0) {
@@ -89,33 +146,21 @@ function WorkersPage() {
 
       return {
         ...w,
-        transactions: wTxns.length,
-        discountProcessed: discount,
-        customersScanned: customers,
-        lastActivity: lastAct
+        transactions: wTxns.length > 0 ? wTxns.length : w.transactions,
+        discountProcessed: discount > 0 ? discount : w.discountProcessed,
+        customersScanned: customers > 0 ? customers : w.customersScanned,
+        lastActivity: lastAct,
       };
     });
   }, [workers, transactions]);
 
-  const filtered = useMemo(
-    () =>
-      augmentedWorkers.filter((w) =>
-          (status === "all" || w.status === status) &&
-          (shift === "all" || w.shift === shift) &&
-          (w.name.toLowerCase().includes(query.toLowerCase()) ||
-            w.id.toLowerCase().includes(query.toLowerCase()) ||
-            w.email.toLowerCase().includes(query.toLowerCase())),
-      ),
-    [workers, query, status, shift],
-  );
-
   const totals = useMemo(
     () => ({
-      scans: augmentedWorkers.reduce((s, w) => s + w.scans, 0),
-      discount: augmentedWorkers.reduce((s, w) => s + w.discountProcessed, 0),
+      scans: augmentedWorkers.reduce((s, w) => s + (w.scans || 0), 0),
+      discount: augmentedWorkers.reduce((s, w) => s + (w.discountProcessed || 0), 0),
       active: augmentedWorkers.filter((w) => w.status === "active").length,
     }),
-    [workers],
+    [augmentedWorkers],
   );
 
   const columns: Column<Worker>[] = [
@@ -352,7 +397,26 @@ function WorkersPage() {
             </SelectContent>
           </Select>
         </div>
-        <DataTable rows={filtered} columns={columns} pageSize={10} onRowClick={setSelected} />
+        <DataTable
+          rows={tableWorkers}
+          columns={columns}
+          pageSize={limit}
+          isLoading={isLoading}
+          sortConfig={sortConfig}
+          onSortChange={(key, dir) => setSortConfig({ key, dir })}
+          serverPagination={{
+            currentPage: pagination.page,
+            totalPages: pagination.totalPages,
+            pageSize: pagination.limit,
+            totalItems: pagination.total,
+            onPageChange: (newPage) => setPage(newPage),
+            onPageSizeChange: (newLimit) => {
+              setLimit(newLimit);
+              setPage(1);
+            },
+          }}
+          onRowClick={setSelected}
+        />
       </Panel>
 
       <Dialog open={!!selected} onOpenChange={(o) => !o && setSelected(null)}>
@@ -603,6 +667,8 @@ function WorkersPage() {
                       }
                       
                       await saveWorker(workerToSave);
+                      await fetchTableWorkers();
+                      if (getWorkers) getWorkers({ all: true }).catch(() => {});
                       toast.success(editingWorker.id ? "Worker updated successfully" : "Worker created successfully");
                       setEditingWorker(null);
                       setConfirmPassword("");
@@ -643,6 +709,8 @@ function WorkersPage() {
                   setIsDeleting(true);
                   try {
                     await deleteWorker(deletingWorker.id);
+                    await fetchTableWorkers();
+                    if (getWorkers) getWorkers({ all: true }).catch(() => {});
                     toast.success("Worker deleted successfully");
                     setDeletingWorker(null);
                   } catch (err: any) {

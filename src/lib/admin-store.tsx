@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { adminService, DEFAULT_GROUP_ID, setToken, type CustomerQueryParams } from "@/services/adminService";
+import { adminService, DEFAULT_GROUP_ID, setToken, type CustomerQueryParams, type WorkerQueryParams } from "@/services/adminService";
 import type { AdminProfile, Customer, Group, Notification, Transaction, Worker } from "@/services/types";
 
 interface AdminState {
@@ -34,6 +34,7 @@ interface AdminState {
   saveWorker: (worker: Worker) => Promise<void>;
   deleteWorker: (workerId: string) => Promise<void>;
   getCustomers: (params?: CustomerQueryParams) => Promise<Customer[]>;
+  getWorkers: (params?: WorkerQueryParams) => Promise<Worker[]>;
   getGroups: () => Promise<Group[]>;
 }
 
@@ -86,7 +87,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
           adminService.getCustomers({ all: true }).catch(catchError),
           adminService.getGroups().catch(catchError),
           adminService.getNotifications().catch(catchError),
-          adminService.getWorkers().catch(catchError),
+          adminService.getWorkers({ all: true }).catch(catchError),
           adminService.getTransactions().catch(catchError)
         ]);
         
@@ -280,6 +281,19 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     }
   }, [logout]);
 
+  const getWorkers = useCallback(async (params?: WorkerQueryParams) => {
+    try {
+      const data = await adminService.getWorkers(params);
+      if (!params || params.all) {
+        setWorkers(data);
+      }
+      return data;
+    } catch (err: any) {
+      if (err.message?.includes("401")) logout();
+      throw err;
+    }
+  }, [logout]);
+
   const value: AdminState = {
     authReady,
     authed,
@@ -320,6 +334,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     saveWorker,
     deleteWorker,
     getCustomers,
+    getWorkers,
     getGroups,
   };
 

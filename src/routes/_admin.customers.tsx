@@ -91,11 +91,11 @@ function CustomersPage() {
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
 
-  // Debounce search query
+  // Debounce search query (3 seconds)
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedQuery(query);
-    }, 350);
+    }, 3000);
     return () => clearTimeout(timer);
   }, [query]);
 

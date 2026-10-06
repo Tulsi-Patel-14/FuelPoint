@@ -25,6 +25,17 @@ export interface CustomerQueryParams {
   all?: boolean;
 }
 
+export interface WorkerQueryParams {
+  page?: number;
+  limit?: number;
+  search?: string;
+  status?: string;
+  shift?: string;
+  sortBy?: string;
+  sortOrder?: 'asc' | 'desc';
+  all?: boolean;
+}
+
 export interface Pagination {
   page: number;
   limit: number;
@@ -34,6 +45,11 @@ export interface Pagination {
 
 export interface PaginatedCustomers {
   customers: Customer[];
+  pagination: Pagination;
+}
+
+export interface PaginatedWorkers {
+  workers: Worker[];
   pagination: Pagination;
 }
 
@@ -62,20 +78,38 @@ const fetchApi = async (endpoint: string, options: RequestInit = {}) => {
   return json.data;
 };
 
-const mapWorker = (w: any): Worker => ({
-  id: w.id,
-  name: w.fullName || w.name || "Unknown",
-  email: w.user?.email || w.email || "",
-  phone: w.user?.mobile || w.phone || "",
-  shift: w.shift || "Morning",
-  status: (w.user?.status?.toLowerCase() || w.status || "active") as any,
-  joinedAt: w.joinedAt || new Date().toISOString(),
-  scans: w.scans || 0,
-  customersScanned: w.customersScanned || 0,
-  transactions: w.transactions || 0,
-  discountProcessed: w.discountProcessed || 0,
-  lastActivity: w.lastActivity || w.joinedAt || new Date().toISOString(),
-});
+const mapWorker = (w: any): Worker => {
+  const txns = Array.isArray(w.transactions) ? w.transactions : [];
+  const txnsCount = typeof w.transactions === 'number'
+    ? w.transactions
+    : (typeof w.transactionsCount === 'number' ? w.transactionsCount : txns.length);
+  const discount = typeof w.discountProcessed === 'number'
+    ? w.discountProcessed
+    : txns.reduce((sum: number, t: any) => sum + (t.discountAmount || 0), 0);
+  const customers = typeof w.customersScanned === 'number'
+    ? w.customersScanned
+    : new Set(txns.map((t: any) => t.customerId)).size;
+  let lastAct = w.lastActivity || w.joinedAt || new Date().toISOString();
+  if (txns.length > 0 && !w.lastActivity) {
+    const sorted = [...txns].sort((a: any, b: any) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    lastAct = sorted[0].createdAt;
+  }
+
+  return {
+    id: w.id,
+    name: w.fullName || w.name || "Unknown",
+    email: w.user?.email || w.email || "",
+    phone: w.user?.mobile || w.phone || "",
+    shift: w.shift || "Morning",
+    status: (w.user?.status?.toLowerCase() || w.status || "active") as any,
+    joinedAt: w.joinedAt || new Date().toISOString(),
+    scans: w.scans || 0,
+    customersScanned: customers,
+    transactions: txnsCount,
+    discountProcessed: discount,
+    lastActivity: lastAct,
+  };
+};
 
 const mapCustomer = (c: any): Customer => {
   let lastAct = c.lastActivity || c.joinedAt || null;
@@ -214,9 +248,43 @@ export const adminService = {
     return mapCustomer(raw);
   },
   deleteCustomer: async (id: string): Promise<void> => fetchApi(`/customers/${id}`, { method: 'DELETE' }),
-  getWorkers: async (): Promise<Worker[]> => {
-    const raw = await fetchApi('/workers');
-    return raw.map(mapWorker);
+  getWorkers: async (params?: WorkerQueryParams): Promise<Worker[]> => {
+    const query = new URLSearchParams();
+    if (params?.all) query.set('all', 'true');
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.search) query.set('search', params.search);
+    if (params?.status && params.status !== 'all') query.set('status', params.status);
+    if (params?.shift && params.shift !== 'all') query.set('shift', params.shift);
+    if (params?.sortBy) query.set('sortBy', params.sortBy);
+    if (params?.sortOrder) query.set('sortOrder', params.sortOrder);
+
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const raw = await fetchApi(`/workers${qStr}`);
+    return Array.isArray(raw) ? raw.map(mapWorker) : (raw?.data ? raw.data.map(mapWorker) : []);
+  },
+  getWorkersPaginated: async (params?: WorkerQueryParams): Promise<PaginatedWorkers> => {
+    const query = new URLSearchParams();
+    if (params?.page) query.set('page', params.page.toString());
+    if (params?.limit) query.set('limit', params.limit.toString());
+    if (params?.search) query.set('search', params.search);
+    if (params?.status && params.status !== 'all') query.set('status', params.status);
+    if (params?.shift && params.shift !== 'all') query.set('shift', params.shift);
+    if (params?.sortBy) query.set('sortBy', params.sortBy);
+    if (params?.sortOrder) query.set('sortOrder', params.sortOrder);
+
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    const json = await fetchApiRaw(`/workers${qStr}`);
+    const items = Array.isArray(json.data) ? json.data.map(mapWorker) : [];
+    return {
+      workers: items,
+      pagination: json.pagination || {
+        page: params?.page || 1,
+        limit: params?.limit || 10,
+        total: items.length,
+        totalPages: 1
+      }
+    };
   },
   createWorker: async (worker: Partial<Worker>): Promise<Worker> => {
     const raw = await fetchApi('/workers', { method: 'POST', body: JSON.stringify(mapWorkerPayload(worker)) });

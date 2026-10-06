@@ -118,6 +118,8 @@ export function DataTable<T extends { id: string }>({
   onRowClick,
   serverPagination,
   isLoading,
+  sortConfig,
+  onSortChange,
 }: {
   rows: T[];
   columns: Column<T>[];
@@ -133,6 +135,8 @@ export function DataTable<T extends { id: string }>({
     onPageSizeChange: (size: number) => void;
   };
   isLoading?: boolean;
+  sortConfig?: { key: string; dir: "asc" | "desc" } | null;
+  onSortChange?: (key: string, dir: "asc" | "desc") => void;
 }) {
   const [sort, setSort] = useState<{ key: string; dir: "asc" | "desc" } | null>(null);
   const [page, setPage] = useState(1);
@@ -140,9 +144,12 @@ export function DataTable<T extends { id: string }>({
 
   useEffect(() => setPage(1), [rows.length, sort, actualPageSize]);
 
+  const currentSort = sortConfig !== undefined ? sortConfig : sort;
+
   const sorted = useMemo(() => {
-    if (!sort) return rows;
-    const col = columns.find((c) => c.key === sort.key);
+    if (serverPagination) return rows;
+    if (!currentSort) return rows;
+    const col = columns.find((c) => c.key === currentSort.key);
     if (!col?.sortValue) return rows;
     return [...rows].sort((a, b) => {
       const av = col.sortValue!(a);
@@ -151,9 +158,9 @@ export function DataTable<T extends { id: string }>({
         typeof av === "number" && typeof bv === "number"
           ? av - bv
           : String(av).localeCompare(String(bv));
-      return sort.dir === "asc" ? res : -res;
+      return currentSort.dir === "asc" ? res : -res;
     });
-  }, [rows, sort, columns]);
+  }, [rows, currentSort, columns, serverPagination]);
 
   const totalPages = serverPagination ? serverPagination.totalPages : Math.max(1, Math.ceil(sorted.length / actualPageSize));
   const safePage = serverPagination ? serverPagination.currentPage : Math.min(page, totalPages);
@@ -161,10 +168,16 @@ export function DataTable<T extends { id: string }>({
   const totalCount = serverPagination ? serverPagination.totalItems : sorted.length;
   const curPageSize = serverPagination ? serverPagination.pageSize : actualPageSize;
 
-  const toggleSort = (key: string) =>
-    setSort((prev) =>
-      prev?.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" },
-    );
+  const toggleSort = (key: string) => {
+    const nextDir = currentSort?.key === key && currentSort.dir === "asc" ? "desc" : "asc";
+    if (onSortChange) {
+      onSortChange(key, nextDir);
+    } else {
+      setSort((prev) =>
+        prev?.key === key ? { key, dir: prev.dir === "asc" ? "desc" : "asc" } : { key, dir: "desc" },
+      );
+    }
+  };
 
   return (
     <div className={cn("relative", isLoading && "opacity-60 transition-opacity")}>
@@ -185,7 +198,7 @@ export function DataTable<T extends { id: string }>({
                       onClick={() => toggleSort(col.key)}
                       className={cn(
                         "inline-flex items-center gap-1 cursor-pointer transition-colors hover:text-foreground",
-                        sort?.key === col.key && "text-primary",
+                        currentSort?.key === col.key && "text-primary",
                       )}
                     >
                       {col.header}
