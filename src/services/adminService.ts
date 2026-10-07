@@ -343,6 +343,17 @@ export const adminService = {
     }
     return json;
   },
+  verifyResetToken: async (token: string): Promise<{ valid: boolean; message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-reset-token?token=${encodeURIComponent(token.trim())}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json.valid) {
+      throw new Error(json.message || "This password reset link is invalid or has expired.");
+    }
+    return json;
+  },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
   getGroupsRaw: async (): Promise<{ success: boolean; data: Group[]; stats?: any }> => fetchApiRaw('/groups'),
   createGroup: async (group: Partial<Group>): Promise<Group> => {

@@ -11,7 +11,7 @@ import {
   ShieldAlert,
   ShieldCheck,
 } from "lucide-react";
-import { useState, useId } from "react";
+import { useState, useId, useEffect } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -51,10 +51,42 @@ function ResetPasswordPage() {
   const [loading, setLoading] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [isTokenInvalidOrExpired, setIsTokenInvalidOrExpired] = useState(false);
+  const [isValidatingToken, setIsValidatingToken] = useState(Boolean(rawToken));
   const [errorMessage, setErrorMessage] = useState("");
 
   const newPasswordId = useId();
   const confirmPasswordId = useId();
+
+  useEffect(() => {
+    if (!rawToken) {
+      setIsValidatingToken(false);
+      return;
+    }
+
+    let isMounted = true;
+    const verifyToken = async () => {
+      setIsValidatingToken(true);
+      try {
+        await adminService.verifyResetToken(rawToken);
+        if (isMounted) {
+          setIsTokenInvalidOrExpired(false);
+        }
+      } catch {
+        if (isMounted) {
+          setIsTokenInvalidOrExpired(true);
+        }
+      } finally {
+        if (isMounted) {
+          setIsValidatingToken(false);
+        }
+      }
+    };
+
+    verifyToken();
+    return () => {
+      isMounted = false;
+    };
+  }, [rawToken]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -162,8 +194,20 @@ function ResetPasswordPage() {
             <p className="font-semibold text-foreground">FuelPoint Admin</p>
           </div>
 
-          {/* STATE 1: MISSING TOKEN */}
-          {!rawToken ? (
+          {/* STATE 0: VALIDATING TOKEN */}
+          {isValidatingToken ? (
+            <div className="space-y-6 text-center py-8">
+              <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-primary/10 text-primary">
+                <Loader2 className="size-7 animate-spin" />
+              </div>
+              <div className="space-y-2">
+                <h2 className="text-2xl font-bold text-foreground">Verifying reset link…</h2>
+                <p className="text-sm text-muted-foreground">
+                  Checking link validity and security status.
+                </p>
+              </div>
+            </div>
+          ) : !rawToken ? (
             <div className="space-y-6 text-center">
               <div className="mx-auto flex size-14 items-center justify-center rounded-full bg-destructive/10 text-destructive">
                 <ShieldAlert className="size-7" />
