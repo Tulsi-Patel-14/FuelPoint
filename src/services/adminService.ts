@@ -53,6 +53,62 @@ export interface PaginatedWorkers {
   pagination: Pagination;
 }
 
+export interface ReportSummaryResponse {
+  dateRange: { start: string; end: string };
+  transactions: {
+    transactions: number;
+    revenue: number;
+    litresDispensed: number;
+    avgTicket: number;
+  };
+  discount: {
+    discountGiven: number;
+    effectiveRate: number;
+    discountedScans: number;
+    avgDiscountPerScan: number;
+  };
+  customers: {
+    newRegistrations: number;
+    totalCustomers: number;
+    active: number;
+    unassigned: number;
+  };
+  workers: {
+    workers: number;
+    active: number;
+    scansInRange: number;
+    discountProcessed: number;
+  };
+  groups: {
+    groups: number;
+    activeGroups: number;
+    groupDiscount: number;
+    groupedCustomers: number;
+  };
+  scansInRange: number;
+  registrationsInRange: number;
+}
+
+export interface ReportDataParams {
+  category: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ReportDataResponse<T = any> {
+  data: T[];
+  pagination: Pagination;
+}
+
+export interface ExportReportParams {
+  category: string;
+  startDate?: string;
+  endDate?: string;
+  format: 'csv' | 'excel';
+}
+
 export interface DashboardData {
   days: number;
   overview: {
@@ -360,6 +416,80 @@ export const adminService = {
   getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
   getProfile: async () => fetchApi('/profile'),
   getToday: () => new Date(),
+  getReportSummary: async (params?: { startDate?: string; endDate?: string }): Promise<ReportSummaryResponse> => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.endDate) query.set('endDate', params.endDate);
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/reports/summary${qStr}`);
+  },
+  getReportData: async (params: ReportDataParams): Promise<ReportDataResponse> => {
+    const query = new URLSearchParams();
+    query.set('category', params.category);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    if (params.page) query.set('page', params.page.toString());
+    if (params.limit) query.set('limit', params.limit.toString());
+    const qStr = `?${query.toString()}`;
+    const raw = await fetchApiRaw(`/reports/data${qStr}`);
+    return {
+      data: Array.isArray(raw.data) ? raw.data : [],
+      pagination: raw.pagination || {
+        page: params.page || 1,
+        limit: params.limit || 10,
+        total: (raw.data || []).length,
+        totalPages: 1,
+      },
+    };
+  },
+  exportReport: async (params: ExportReportParams): Promise<void> => {
+    const query = new URLSearchParams();
+    query.set('category', params.category);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    query.set('format', params.format);
+
+    const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
+    const headers: Record<string, string> = {};
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reports/export?${query.toString()}`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let msg = 'Nothing to export for this range.';
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.message) msg = parsed.message;
+      } catch {
+        // default
+      }
+      throw new Error(msg);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition');
+    let filename = `${params.category}-report.${params.format === 'csv' ? 'csv' : 'xlsx'}`;
+    if (disposition) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };
 
 export { DEFAULT_GROUP_ID };
