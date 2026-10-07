@@ -53,6 +53,41 @@ export interface PaginatedWorkers {
   pagination: Pagination;
 }
 
+export interface DashboardData {
+  days: number;
+  overview: {
+    totalCustomers: number;
+    totalWorkers: number;
+    activeWorkers: number;
+    totalDiscount: number;
+    totalRevenue: number;
+    totalTransactions: number;
+    todayTransactions: number;
+    todayDiscount: number;
+    avgDiscountPercent: number;
+    deltaRegistrations: number;
+    deltaDiscount: number;
+  };
+  series: SeriesPoint[];
+  groupDistribution: Array<{
+    id: string;
+    name: string;
+    discountPercent: number;
+    active: boolean;
+    customers: number;
+    transactions: number;
+    discountGenerated: number;
+  }>;
+  workerActivity: Array<{
+    id: string;
+    name: string;
+    scans: number;
+    transactions: number;
+    discountProcessed: number;
+  }>;
+  recentTransactions: Transaction[];
+}
+
 const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
   const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
   
@@ -133,6 +168,21 @@ const mapCustomer = (c: any): Customer => {
     transactionsList: c.transactions || [],
   };
 };
+
+const mapTransaction = (t: any): Transaction => ({
+  id: t.id,
+  customerId: t.customerId,
+  customerName: t.customer?.fullName || t.customerName || "Customer",
+  workerId: t.workerId,
+  workerName: t.worker?.fullName || t.workerName || "Worker",
+  groupId: t.customer?.groupId || t.groupId || DEFAULT_GROUP_ID,
+  amount: t.amount || 0,
+  discountPercent: t.discountPercent || 0,
+  discountAmount: t.discountAmount || 0,
+  litres: t.litres || 0,
+  fuel: (t.fuelType || t.fuel || "Petrol") as any,
+  createdAt: t.createdAt || new Date().toISOString(),
+});
 
 const mapCustomerPayload = (data: Partial<Customer>) => {
   const payload: any = {
@@ -296,8 +346,16 @@ export const adminService = {
   },
   deleteWorker: async (id: string): Promise<void> => fetchApi(`/workers/${id}`, { method: 'DELETE' }),
   getTransactions: async (): Promise<Transaction[]> => {
-    const res = await fetchApi('/transactions');
-    return res.data || res; // handle pagination structure if applicable
+    const raw = await fetchApi('/transactions');
+    const list = Array.isArray(raw) ? raw : (Array.isArray(raw?.data) ? raw.data : []);
+    return list.map(mapTransaction);
+  },
+  getDashboard: async (days: number = 30): Promise<DashboardData> => {
+    const raw = await fetchApi(`/dashboard?days=${days}`);
+    return {
+      ...raw,
+      recentTransactions: (raw.recentTransactions || []).map(mapTransaction)
+    };
   },
   getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
   getProfile: async () => fetchApi('/profile'),
