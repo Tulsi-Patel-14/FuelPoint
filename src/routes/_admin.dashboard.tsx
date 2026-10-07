@@ -9,7 +9,7 @@ import {
   Users,
   Wrench,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   DonutChart,
   HorizontalBarChart,
@@ -27,6 +27,7 @@ import {
   formatNumber,
   groupDistribution,
   workerActivity,
+  type DashboardData,
 } from "@/services/adminService";
 
 export const Route = createFileRoute("/_admin/dashboard")({
@@ -56,31 +57,56 @@ const ranges = [
 function DashboardPage() {
   const { customers, workers, groups, transactions } = useAdmin();
   const [days, setDays] = useState<number>(30);
+  const [dashboardData, setDashboardData] = useState<DashboardData | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
-  const overview = useMemo(() => {
+  useEffect(() => {
+    let cancelled = false;
+    setIsLoading(true);
+    adminService
+      .getDashboard(days)
+      .then((data) => {
+        if (!cancelled) setDashboardData(data);
+      })
+      .catch((err) => {
+        console.error("Failed to load dashboard data:", err);
+      })
+      .finally(() => {
+        if (!cancelled) setIsLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [days]);
+
+  // Fallback to client-computed overview if dashboard API is loading initially
+  const fallbackOverview = useMemo(() => {
     const cutoff = adminService.getToday().getTime() - days * 86400000;
     const periodCustomers = customers.filter(c => new Date(c.registeredAt).getTime() >= cutoff);
     const periodTransactions = transactions.filter(t => new Date(t.createdAt).getTime() >= cutoff);
     return buildOverview(periodCustomers, workers, groups, periodTransactions);
   }, [customers, workers, groups, transactions, days]);
-  const series = useMemo(
+
+  const fallbackSeries = useMemo(
     () => buildSeries(customers, transactions, days),
     [customers, transactions, days],
   );
-  const dist = useMemo(
+  const fallbackDist = useMemo(
     () => groupDistribution(customers, groups, transactions).filter((g) => g.customers > 0),
     [customers, groups, transactions],
   );
-  const activity = useMemo(() => workerActivity(workers).slice(0, 8), [workers]);
-  const recent = transactions.slice(0, 8);
+  const fallbackActivity = useMemo(() => workerActivity(workers).slice(0, 8), [workers]);
+  const fallbackRecent = transactions.slice(0, 8);
 
-  const half = Math.floor(series.length / 2);
-  const delta = (key: "transactions" | "discount" | "registrations") => {
-    const first = series.slice(0, half).reduce((s, p) => s + p[key], 0);
-    const second = series.slice(half).reduce((s, p) => s + p[key], 0);
-    if (!first) return 0;
-    return ((second - first) / first) * 100;
-  };
+  const overview = dashboardData?.overview || fallbackOverview;
+  const series = dashboardData?.series || fallbackSeries;
+  const dist = dashboardData?.groupDistribution || fallbackDist;
+  const activity = dashboardData?.workerActivity || fallbackActivity;
+  const recent = dashboardData?.recentTransactions || fallbackRecent;
+
+  const deltaRegistrations = dashboardData?.overview?.deltaRegistrations ?? 0;
+  const deltaDiscount = dashboardData?.overview?.deltaDiscount ?? 0;
 
   return (
     <>
@@ -111,7 +137,7 @@ function DashboardPage() {
           label="Total customers"
           value={formatNumber(overview.totalCustomers)}
           icon={Users}
-          delta={delta("registrations")}
+          delta={deltaRegistrations}
           hint="in this period"
           to="/customers"
         />
@@ -128,8 +154,8 @@ function DashboardPage() {
           value={formatCurrency(overview.totalDiscount)}
           icon={BadgePercent}
           tone="teal"
-          delta={delta("discount")}
-          hint={`avg ${overview.avgDiscountPercent.toFixed(2)}% of sales`}
+          delta={deltaDiscount}
+          hint={`avg ${(overview.avgDiscountPercent || 0).toFixed(2)}% of sales`}
           to="/reports"
         />
         <StatCard
