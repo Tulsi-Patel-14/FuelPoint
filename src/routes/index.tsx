@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import { ArrowRight, Fuel, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
+import { ArrowRight, CheckCircle2, Eye, EyeOff, Fuel, Loader2, Lock, Mail, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useAdmin } from "@/lib/admin-store";
+import { adminService } from "@/services/adminService";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -40,23 +41,76 @@ function LoginPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState("rajesh.menon@fuelpoint.in");
   const [password, setPassword] = useState("fuelpoint");
+  const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [resetEmail, setResetEmail] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
+
+  const handleForgotOpenChange = (open: boolean) => {
+    setForgot(open);
+    if (!open) {
+      setResetLoading(false);
+      setResetSent(false);
+      setResetEmail("");
+    }
+  };
+
+  const handleForgotSubmit = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    const emailToReset = resetEmail.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailToReset || !emailRegex.test(emailToReset)) {
+      toast.error("Please enter a valid email address.");
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      await adminService.requestPasswordReset(emailToReset);
+      setResetSent(true);
+    } catch (err: any) {
+      if (err.message && err.message.toLowerCase().includes("too many")) {
+        toast.error(err.message);
+      } else {
+        // Generic success even on silent failure to avoid enumeration
+        setResetSent(true);
+      }
+    } finally {
+      setResetLoading(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email.trim() || password.length < 4) {
-      toast.error("Enter a valid email and a password of at least 4 characters.");
+      toast.error("Invalid input", {
+        description: "Please enter a valid email address and a password of at least 4 characters.",
+      });
       return;
     }
     setLoading(true);
     try {
       await login(email.trim(), password, remember);
+      toast.success("Signed in successfully", {
+        description: "Welcome back to the FuelPoint Admin Console.",
+      });
       navigate({ to: "/dashboard" });
     } catch (err: any) {
-      toast.error(err.message || "Failed to sign in");
+      let rawMsg = String(err?.message || "Failed to sign in");
+      if (rawMsg.includes("{") && rawMsg.includes("}")) {
+        try {
+          const parsed = JSON.parse(rawMsg.slice(rawMsg.indexOf("{"), rawMsg.lastIndexOf("}") + 1));
+          if (parsed.message) rawMsg = parsed.message;
+        } catch {}
+      }
+      rawMsg = rawMsg.replace(/^(Login|API)\s*Error:\s*\d+\s*-\s*/i, "").trim();
+
+      toast.error(rawMsg || "Invalid admin credentials", {
+        description: "Please check your email and password and try again.",
+      });
       setLoading(false);
     }
   };
@@ -149,13 +203,26 @@ function LoginPage() {
                 <Lock className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="password"
-                  type="password"
+                  type={showPassword ? "text" : "password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="pl-9"
+                  className="pl-9 pr-10"
                   placeholder="••••••••"
                   autoComplete="current-password"
                 />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword((prev) => !prev)}
+                  className="absolute top-1/2 right-3 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                  tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
+                >
+                  {showPassword ? (
+                    <EyeOff className="size-4" />
+                  ) : (
+                    <Eye className="size-4" />
+                  )}
+                </button>
               </div>
             </div>
 
@@ -188,39 +255,73 @@ function LoginPage() {
         </div>
       </div>
 
-      <Dialog open={forgot} onOpenChange={setForgot}>
+      <Dialog open={forgot} onOpenChange={handleForgotOpenChange}>
         <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Reset your password</DialogTitle>
-            <DialogDescription>
-              We'll email a secure reset link to your registered admin address.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="space-y-2">
-            <Label htmlFor="reset">Admin email</Label>
-            <Input
-              id="reset"
-              type="email"
-              value={resetEmail}
-              onChange={(e) => setResetEmail(e.target.value)}
-              placeholder="admin@fuelpoint.in"
-            />
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setForgot(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() => {
-                setForgot(false);
-                toast.success("Reset link sent", {
-                  description: `Check ${resetEmail || "your inbox"} for instructions.`,
-                });
-              }}
-            >
-              Send reset link
-            </Button>
-          </DialogFooter>
+          {resetSent ? (
+            <>
+              <DialogHeader>
+                <div className="mx-auto mb-2 flex size-12 items-center justify-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
+                  <CheckCircle2 className="size-6" />
+                </div>
+                <DialogTitle className="text-center">Check your email</DialogTitle>
+                <DialogDescription className="text-center text-sm">
+                  If an administrator account exists for this email, we've sent a password reset link.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="rounded-lg border border-border/60 bg-muted/40 p-3 text-center text-xs text-muted-foreground">
+                The link will expire in 30 minutes.
+              </div>
+              <DialogFooter className="sm:justify-center">
+                <Button
+                  className="w-full sm:w-auto"
+                  onClick={() => handleForgotOpenChange(false)}
+                >
+                  Close
+                </Button>
+              </DialogFooter>
+            </>
+          ) : (
+            <form onSubmit={handleForgotSubmit}>
+              <DialogHeader>
+                <DialogTitle>Reset your password</DialogTitle>
+                <DialogDescription>
+                  We'll email a secure reset link to your registered admin address.
+                </DialogDescription>
+              </DialogHeader>
+              <div className="my-4 space-y-2">
+                <Label htmlFor="reset">Admin email</Label>
+                <Input
+                  id="reset"
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  placeholder="admin@fuelpoint.in"
+                  disabled={resetLoading}
+                  autoComplete="email"
+                  required
+                />
+              </div>
+              <DialogFooter className="gap-2 sm:gap-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => handleForgotOpenChange(false)}
+                  disabled={resetLoading}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={resetLoading}>
+                  {resetLoading ? (
+                    <>
+                      <Loader2 className="mr-2 size-4 animate-spin" /> Sending…
+                    </>
+                  ) : (
+                    "Send reset link"
+                  )}
+                </Button>
+              </DialogFooter>
+            </form>
+          )}
         </DialogContent>
       </Dialog>
     </div>

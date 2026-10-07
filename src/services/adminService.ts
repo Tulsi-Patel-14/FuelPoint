@@ -144,6 +144,39 @@ export interface DashboardData {
   recentTransactions: Transaction[];
 }
 
+export const extractErrorMessage = async (response: Response, defaultMessage: string = "Request failed"): Promise<string> => {
+  try {
+    const text = await response.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') {
+          if (typeof json.message === 'string' && json.message.trim()) {
+            return json.message.trim();
+          }
+          if (typeof json.error === 'string' && json.error.trim()) {
+            return json.error.trim();
+          }
+        }
+      } catch {
+        if (text.length < 150 && !text.startsWith('<')) {
+          return text.trim();
+        }
+      }
+    }
+  } catch {
+    // network or stream error
+  }
+
+  if (response.status === 401) return "Invalid email or password.";
+  if (response.status === 403) return "Access denied. Admin privileges required.";
+  if (response.status === 404) return "Requested resource not found.";
+  if (response.status === 429) return "Too many requests. Please try again shortly.";
+  if (response.status >= 500) return "Server error occurred. Please try again later.";
+
+  return defaultMessage;
+};
+
 const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
   const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
   
@@ -159,7 +192,10 @@ const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
     ...options,
     headers,
   });
-  if (!response.ok) throw new Error(`API Error: ${response.status} - ${await response.text()}`);
+  if (!response.ok) {
+    const message = await extractErrorMessage(response, `Request failed (${response.status})`);
+    throw new Error(message);
+  }
   return await response.json();
 };
 
@@ -276,9 +312,36 @@ export const adminService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!response.ok) throw new Error(`Login Error: ${response.status} - ${await response.text()}`);
+    if (!response.ok) {
+      const message = await extractErrorMessage(response, "Invalid admin credentials");
+      throw new Error(message);
+    }
     const json = await response.json();
     return json.data;
+  },
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(json.message || `Request failed (${response.status})`);
+    }
+    return json;
+  },
+  resetPassword: async (data: { token: string; password: string; confirmPassword?: string }): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(json.message || `Reset failed (${response.status})`);
+    }
+    return json;
   },
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
   getGroupsRaw: async (): Promise<{ success: boolean; data: Group[]; stats?: any }> => fetchApiRaw('/groups'),

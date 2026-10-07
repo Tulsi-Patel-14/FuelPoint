@@ -64,14 +64,34 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   const logout = useCallback(() => {
     setAuthed(false);
     setToken("");
-    if (typeof window !== "undefined") sessionStorage.removeItem(AUTH_KEY);
+    if (typeof window !== "undefined") {
+      sessionStorage.removeItem(AUTH_KEY);
+      localStorage.removeItem(AUTH_KEY);
+      localStorage.removeItem("adminToken");
+    }
   }, []);
 
-  // Restore the session after a page refresh (client-side only).
+  // Restore the session after a page refresh or browser restart (client-side only).
   useEffect(() => {
-    if (sessionStorage.getItem(AUTH_KEY) === "1") setAuthed(true);
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("adminToken");
+      const isAuthed = sessionStorage.getItem(AUTH_KEY) === "1" || localStorage.getItem(AUTH_KEY) === "1";
+      if (token && isAuthed) {
+        try {
+          // Check token expiry
+          const payload = JSON.parse(atob(token.split(".")[1]));
+          if (payload.exp && payload.exp * 1000 > Date.now()) {
+            setAuthed(true);
+          } else {
+            logout();
+          }
+        } catch {
+          setAuthed(true);
+        }
+      }
+    }
     setAuthReady(true);
-  }, []);
+  }, [logout]);
 
   useEffect(() => {
     if (!authed) return;
@@ -126,6 +146,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     setAuthed(true);
     setProfile((p) => ({ ...p, email: email || p.email }));
     if (typeof window !== "undefined") {
+      localStorage.setItem(AUTH_KEY, "1");
       if (remember) {
         sessionStorage.setItem(AUTH_KEY, "1");
       } else {
