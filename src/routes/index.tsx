@@ -39,8 +39,8 @@ export const Route = createFileRoute("/")({
 function LoginPage() {
   const { login } = useAdmin();
   const navigate = useNavigate();
-  const [email, setEmail] = useState("rajesh.menon@fuelpoint.in");
-  const [password, setPassword] = useState("fuelpoint");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [remember, setRemember] = useState(true);
   const [loading, setLoading] = useState(false);
@@ -303,10 +303,6 @@ function LoginPage() {
             </Button>
           </form>
 
-          <p className="mt-6 rounded-lg border border-border bg-card px-3 py-2.5 text-xs text-muted-foreground">
-            Demo credentials are pre-filled. Authentication is mocked on the client and can be
-            wired to a real API later.
-          </p>
         </div>
       </div>
 
