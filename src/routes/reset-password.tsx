@@ -9,7 +9,6 @@ import {
   Loader2,
   Lock,
   ShieldAlert,
-  ShieldCheck,
 } from "lucide-react";
 import { useState, useId, useEffect } from "react";
 import { toast } from "sonner";
@@ -178,9 +177,7 @@ function ResetPasswordPage() {
           </div>
         </div>
 
-        <p className="flex items-center gap-2 text-xs text-white/50">
-          <ShieldCheck className="size-4" /> Cryptographic token verification · Single-use update
-        </p>
+        <div aria-hidden="true" />
       </div>
 
       {/* Form / Content panel */}
