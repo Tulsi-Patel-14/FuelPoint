@@ -53,6 +53,27 @@ export interface PaginatedWorkers {
   pagination: Pagination;
 }
 
+export interface CustomerSummaryResponse {
+  totalCustomers: number;
+  newRegistrations7d: number;
+  activeCustomers: number;
+  usedPumpCustomers: number;
+}
+
+export interface WorkerSummaryResponse {
+  totalWorkers: number;
+  activeWorkers: number;
+  totalScans: number;
+  discountProcessed: number;
+}
+
+export interface GroupSummaryResponse {
+  totalGroups: number;
+  activeGroups: number;
+  groupedCustomers: number;
+  discountGenerated: number;
+}
+
 export interface ReportSummaryResponse {
   dateRange: { start: string; end: string };
   transactions: {
@@ -354,6 +375,7 @@ export const adminService = {
     }
     return json;
   },
+  getGroupSummary: async (): Promise<GroupSummaryResponse> => fetchApi('/groups/summary'),
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
   getGroupsRaw: async (): Promise<{ success: boolean; data: Group[]; stats?: any }> => fetchApiRaw('/groups'),
   createGroup: async (group: Partial<Group>): Promise<Group> => {
@@ -385,6 +407,7 @@ export const adminService = {
   deleteGroup: async (id: string): Promise<void> => {
     await fetchApi(`/groups/${id}`, { method: 'DELETE' });
   },
+  getCustomerSummary: async (): Promise<CustomerSummaryResponse> => fetchApi('/customers/summary'),
   getCustomers: async (params?: CustomerQueryParams): Promise<Customer[]> => {
     const query = new URLSearchParams();
     if (params?.all) query.set('all', 'true');
@@ -428,6 +451,7 @@ export const adminService = {
     return mapCustomer(raw);
   },
   deleteCustomer: async (id: string): Promise<void> => fetchApi(`/customers/${id}`, { method: 'DELETE' }),
+  getWorkerSummary: async (): Promise<WorkerSummaryResponse> => fetchApi('/workers/summary'),
   getWorkers: async (params?: WorkerQueryParams): Promise<Worker[]> => {
     const query = new URLSearchParams();
     if (params?.all) query.set('all', 'true');

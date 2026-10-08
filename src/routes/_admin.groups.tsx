@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BadgePercent, Pencil, Plus, Power, Tags, Trash2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DonutChart, HorizontalBarChart } from "@/components/admin/charts";
 import { PageHeader, Panel, StatCard } from "@/components/admin/primitives";
@@ -35,10 +35,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAdmin } from "@/lib/admin-store";
 import {
+  adminService,
   DEFAULT_GROUP_ID,
   formatCurrency,
   formatDate,
   formatNumber,
+  type GroupSummaryResponse,
 } from "@/services/adminService";
 import type { Group } from "@/services/types";
 
@@ -79,6 +81,24 @@ function GroupsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState<Group | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<GroupSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getGroupSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load group summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   const totalDiscount = useMemo(
     () => groups.reduce((s, g) => s + (g.discountGenerated ?? 0), 0),
@@ -131,6 +151,7 @@ function GroupsPage() {
       });
       setEditing(null);
       setErrors({});
+      fetchSummary();
     } catch (err: any) {
       toast.error(err.message || "Failed to save group");
     } finally {
@@ -156,22 +177,26 @@ function GroupsPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total groups" value={formatNumber(groups.length)} icon={Tags} />
+        <StatCard
+          label="Total groups"
+          value={formatNumber(summaryData ? summaryData.totalGroups : groups.length)}
+          icon={Tags}
+        />
         <StatCard
           label="Active groups"
-          value={formatNumber(groups.filter((g) => g.active).length)}
+          value={formatNumber(summaryData ? summaryData.activeGroups : groups.filter((g) => g.active).length)}
           icon={Power}
           tone="teal"
         />
         <StatCard
           label="Grouped customers"
-          value={formatNumber(totalGroupedCustomers)}
+          value={formatNumber(summaryData ? summaryData.groupedCustomers : totalGroupedCustomers)}
           icon={Users}
           tone="navy"
         />
         <StatCard
           label="Discount generated"
-          value={formatCurrency(totalDiscount)}
+          value={formatCurrency(summaryData ? summaryData.discountGenerated : totalDiscount)}
           icon={BadgePercent}
           tone="teal"
         />
@@ -237,6 +262,7 @@ function GroupsPage() {
                           try {
                             await toggleGroupActive(group.id);
                             toast.success(`Group ${group.active ? "deactivated" : "activated"}`);
+                            fetchSummary();
                           } catch (err: any) {
                             toast.error(err.message || "Failed to toggle group");
                           }
@@ -442,6 +468,7 @@ function GroupsPage() {
                       description: `${deletingGroup.name} customers moved to Default / Unassigned.`,
                     });
                     setDeletingGroup(null);
+                    fetchSummary();
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete group");
                   } finally {

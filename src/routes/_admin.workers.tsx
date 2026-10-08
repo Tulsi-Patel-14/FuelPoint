@@ -40,6 +40,7 @@ import {
   formatNumber,
   relativeDays,
   adminService,
+  type WorkerSummaryResponse,
   type Pagination,
 } from "@/services/adminService";
 import type { Worker } from "@/services/types";
@@ -91,6 +92,24 @@ function WorkersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<WorkerSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getWorkerSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load worker summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   // Debounce search query with 3 seconds delay
   useEffect(() => {
@@ -338,22 +357,26 @@ function WorkersPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total workers" value={formatNumber(augmentedWorkers.length)} icon={Wrench} />
+        <StatCard
+          label="Total workers"
+          value={formatNumber(summaryData ? summaryData.totalWorkers : augmentedWorkers.length)}
+          icon={Wrench}
+        />
         <StatCard
           label="Active workers"
-          value={formatNumber(totals.active)}
+          value={formatNumber(summaryData ? summaryData.activeWorkers : totals.active)}
           icon={UserCheck}
           tone="teal"
         />
         <StatCard
           label="Total scans"
-          value={formatNumber(totals.scans)}
+          value={formatNumber(summaryData ? summaryData.totalScans : totals.scans)}
           icon={Activity}
           tone="navy"
         />
         <StatCard
           label="Discount processed"
-          value={formatCurrency(totals.discount)}
+          value={formatCurrency(summaryData ? summaryData.discountProcessed : totals.discount)}
           icon={BadgePercent}
           tone="teal"
         />
@@ -667,7 +690,7 @@ function WorkersPage() {
                       }
                       
                       await saveWorker(workerToSave);
-                      await fetchTableWorkers();
+                      await Promise.all([fetchTableWorkers(), fetchSummary()]);
                       if (getWorkers) getWorkers({ all: true }).catch(() => {});
                       toast.success(editingWorker.id ? "Worker updated successfully" : "Worker created successfully");
                       setEditingWorker(null);
@@ -709,7 +732,7 @@ function WorkersPage() {
                   setIsDeleting(true);
                   try {
                     await deleteWorker(deletingWorker.id);
-                    await fetchTableWorkers();
+                    await Promise.all([fetchTableWorkers(), fetchSummary()]);
                     if (getWorkers) getWorkers({ all: true }).catch(() => {});
                     toast.success("Worker deleted successfully");
                     setDeletingWorker(null);

@@ -42,6 +42,7 @@ import {
   formatDateTime,
   formatNumber,
   relativeDays,
+  type CustomerSummaryResponse,
   type Pagination,
 } from "@/services/adminService";
 import type { Customer } from "@/services/types";
@@ -90,6 +91,24 @@ function CustomersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<CustomerSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getCustomerSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load customer summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   // Debounce search query (3 seconds)
   useEffect(() => {
@@ -330,23 +349,27 @@ function CustomersPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total customers" value={formatNumber(overview.totalCustomers)} icon={Users} />
+        <StatCard
+          label="Total customers"
+          value={formatNumber(summaryData ? summaryData.totalCustomers : overview.totalCustomers)}
+          icon={Users}
+        />
         <StatCard
           label="New registrations"
-          value={formatNumber(overview.newRegistrations7d)}
+          value={formatNumber(summaryData ? summaryData.newRegistrations7d : overview.newRegistrations7d)}
           icon={UserPlus}
           tone="warning"
           hint="last 7 days"
         />
         <StatCard
           label="Active customers"
-          value={formatNumber(overview.activeCustomers)}
+          value={formatNumber(summaryData ? summaryData.activeCustomers : overview.activeCustomers)}
           icon={UserCheck}
           tone="teal"
         />
         <StatCard
           label="Used the pump"
-          value={formatNumber(overview.usedPumpCustomers)}
+          value={formatNumber(summaryData ? summaryData.usedPumpCustomers : overview.usedPumpCustomers)}
           icon={Fuel}
           tone="navy"
           hint="last 30 days"
@@ -699,7 +722,7 @@ function CustomersPage() {
                       setConfirmPassword("");
                       setErrors({});
                       if (getCustomers) await getCustomers({ all: true });
-                      await fetchTableCustomers();
+                      await Promise.all([fetchTableCustomers(), fetchSummary()]);
                     } catch (err: any) {
                       toast.error(err.message || "Failed to save customer");
                     } finally {
@@ -739,7 +762,7 @@ function CustomersPage() {
                     toast.success("Customer deleted successfully");
                     setDeletingCustomer(null);
                     if (getCustomers) await getCustomers({ all: true });
-                    await fetchTableCustomers();
+                    await Promise.all([fetchTableCustomers(), fetchSummary()]);
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete customer");
                   } finally {
