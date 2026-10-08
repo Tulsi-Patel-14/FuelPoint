@@ -47,6 +47,12 @@ import {
 import type { Customer } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/customers")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      q: (search.q as string) || undefined,
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Customers — FuelPoint Admin" },
@@ -66,9 +72,10 @@ export const Route = createFileRoute("/_admin/customers")({
 });
 
 function CustomersPage() {
+  const searchParams = Route.useSearch();
   const { customers, groups, transactions, workers, saveCustomer, deleteCustomer, getCustomers } = useAdmin();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.q || "");
+  const [debouncedQuery, setDebouncedQuery] = useState(searchParams.q || "");
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -81,7 +88,7 @@ function CustomersPage() {
     totalPages: 1,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.highlight || null);
   
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");

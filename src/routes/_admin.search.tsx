@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { Users, Wrench, ChevronRight } from "lucide-react";
-import { useMemo } from "react";
+import { useState, useEffect } from "react";
 import { PageHeader, Panel, StatusBadge } from "@/components/admin/primitives";
 import { adminService, formatDate } from "@/services/adminService";
 
@@ -17,28 +17,20 @@ function SearchResultsPage() {
   const { q } = Route.useSearch();
   const rawQ = q.trim().toLowerCase();
 
-  const customers = useMemo(() => adminService.getCustomers(), []);
-  const workers = useMemo(() => adminService.getWorkers(), []);
+  const [results, setResults] = useState<any[]>([]);
+  const [loading, setLoading] = useState(false);
 
-  const filteredCustomers = useMemo(() => {
-    if (!rawQ) return [];
-    return customers.filter(
-      (c) =>
-        c.name?.toLowerCase().includes(rawQ) ||
-        c.phone?.toLowerCase().includes(rawQ) ||
-        c.email?.toLowerCase().includes(rawQ)
-    );
-  }, [customers, rawQ]);
-
-  const filteredWorkers = useMemo(() => {
-    if (!rawQ) return [];
-    return workers.filter(
-      (w) =>
-        w.name?.toLowerCase().includes(rawQ) ||
-        w.phone?.toLowerCase().includes(rawQ) ||
-        w.email?.toLowerCase().includes(rawQ)
-    );
-  }, [workers, rawQ]);
+  useEffect(() => {
+    if (!rawQ) {
+      setResults([]);
+      return;
+    }
+    setLoading(true);
+    adminService.globalSearch(rawQ)
+      .then((data) => setResults(data || []))
+      .catch((err) => console.error(err))
+      .finally(() => setLoading(false));
+  }, [rawQ]);
 
   if (!rawQ) {
     return (
@@ -51,7 +43,11 @@ function SearchResultsPage() {
     );
   }
 
-  const hasResults = filteredCustomers.length > 0 || filteredWorkers.length > 0;
+  const filteredCustomers = results.filter(r => r.type === 'customer');
+  const filteredWorkers = results.filter(r => r.type === 'worker');
+  const filteredGroups = results.filter(r => r.type === 'group');
+
+  const hasResults = results.length > 0;
 
   return (
     <div className="space-y-6">
@@ -60,13 +56,19 @@ function SearchResultsPage() {
         description={`Showing results for "${q}"`}
       />
 
-      {!hasResults && (
+      {loading && (
+        <Panel className="p-12 text-center text-muted-foreground">
+          Searching...
+        </Panel>
+      )}
+
+      {!loading && !hasResults && (
         <Panel className="p-12 text-center text-muted-foreground">
           No results found for "{q}".
         </Panel>
       )}
 
-      {filteredCustomers.length > 0 && (
+      {!loading && filteredCustomers.length > 0 && (
         <Panel className="overflow-hidden">
           <div className="border-b border-border bg-muted/30 px-6 py-4">
             <h3 className="flex items-center gap-2 font-semibold">
@@ -79,16 +81,13 @@ function SearchResultsPage() {
               <Link
                 key={c.id}
                 to="/customers"
+                search={{ q: c.name, highlight: c.id }}
                 className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/50"
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-foreground">{c.name}</p>
-                    <StatusBadge status={c.status} />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {c.phone} • {c.email}
-                  </p>
                 </div>
                 <ChevronRight className="size-4 text-muted-foreground" />
               </Link>
@@ -97,7 +96,7 @@ function SearchResultsPage() {
         </Panel>
       )}
 
-      {filteredWorkers.length > 0 && (
+      {!loading && filteredWorkers.length > 0 && (
         <Panel className="overflow-hidden">
           <div className="border-b border-border bg-muted/30 px-6 py-4">
             <h3 className="flex items-center gap-2 font-semibold">
@@ -110,16 +109,41 @@ function SearchResultsPage() {
               <Link
                 key={w.id}
                 to="/workers"
+                search={{ q: w.name, highlight: w.id }}
                 className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/50"
               >
                 <div>
                   <div className="flex items-center gap-2">
                     <p className="font-medium text-foreground">{w.name}</p>
-                    <StatusBadge status={w.status} />
                   </div>
-                  <p className="text-sm text-muted-foreground">
-                    {w.phone} • {w.email}
-                  </p>
+                </div>
+                <ChevronRight className="size-4 text-muted-foreground" />
+              </Link>
+            ))}
+          </div>
+        </Panel>
+      )}
+
+      {!loading && filteredGroups.length > 0 && (
+        <Panel className="overflow-hidden">
+          <div className="border-b border-border bg-muted/30 px-6 py-4">
+            <h3 className="flex items-center gap-2 font-semibold">
+              <Users className="size-4 text-emerald-500" />
+              Groups ({filteredGroups.length})
+            </h3>
+          </div>
+          <div className="divide-y divide-border">
+            {filteredGroups.map((g) => (
+              <Link
+                key={g.id}
+                to="/groups"
+                search={{ highlight: g.id }}
+                className="flex items-center justify-between px-6 py-4 transition-colors hover:bg-muted/50"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-medium text-foreground">{g.name}</p>
+                  </div>
                 </div>
                 <ChevronRight className="size-4 text-muted-foreground" />
               </Link>

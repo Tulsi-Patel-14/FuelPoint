@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BadgePercent, Pencil, Plus, Power, Tags, Trash2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import { toast } from "sonner";
 import { DonutChart, HorizontalBarChart } from "@/components/admin/charts";
 import { PageHeader, Panel, StatCard } from "@/components/admin/primitives";
@@ -43,6 +43,11 @@ import {
 import type { Group } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/groups")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Groups & Discounts — FuelPoint Admin" },
@@ -64,6 +69,7 @@ export const Route = createFileRoute("/_admin/groups")({
 const blank = { id: "", name: "", discountPercent: 1 as number | string, description: "", active: true };
 
 function GroupsPage() {
+  const searchParams = Route.useSearch();
   const {
     groups,
     customers,
@@ -79,6 +85,13 @@ function GroupsPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState<Group | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (searchParams.highlight) {
+      const match = groups.find((g) => g.id === searchParams.highlight);
+      if (match) setEditing(match);
+    }
+  }, [searchParams.highlight, groups]);
 
   const totalDiscount = useMemo(
     () => groups.reduce((s, g) => s + (g.discountGenerated ?? 0), 0),

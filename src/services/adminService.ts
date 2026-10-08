@@ -319,6 +319,9 @@ export const adminService = {
     const json = await response.json();
     return json.data;
   },
+  globalSearch: async (q: string): Promise<any[]> => {
+    return await fetchApi(`/search?q=${encodeURIComponent(q)}`);
+  },
   requestPasswordReset: async (email: string): Promise<{ message: string }> => {
     const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
       method: 'POST',

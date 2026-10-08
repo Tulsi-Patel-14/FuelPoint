@@ -45,6 +45,12 @@ import {
 import type { Worker } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/workers")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      q: (search.q as string) || undefined,
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Workers — FuelPoint Admin" },
@@ -63,9 +69,10 @@ export const Route = createFileRoute("/_admin/workers")({
 });
 
 function WorkersPage() {
+  const searchParams = Route.useSearch();
   const { workers, transactions, saveWorker, deleteWorker, getWorkers } = useAdmin();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.q || "");
+  const [debouncedQuery, setDebouncedQuery] = useState(searchParams.q || "");
   const [status, setStatus] = useState("all");
   const [shift, setShift] = useState("all");
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: "asc" | "desc" } | null>({
@@ -82,7 +89,18 @@ function WorkersPage() {
     totalPages: 1,
   });
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Create selected state holding ID rather than object so it automatically maps, just like Customers.
+  // Wait, workers page uses `selected` holding the entire Worker object!
+  // To handle highlight, let's look up the worker from tableWorkers or workers based on searchParams.highlight inside useEffect.
   const [selected, setSelected] = useState<Worker | null>(null);
+
+  useEffect(() => {
+    if (searchParams.highlight) {
+      const match = tableWorkers.find(w => w.id === searchParams.highlight) || workers.find(w => w.id === searchParams.highlight);
+      if (match) setSelected(match);
+    }
+  }, [searchParams.highlight, tableWorkers, workers]);
   
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");

@@ -39,11 +39,15 @@ function ProfilePage() {
   const [pw, setPw] = useState({ current: "", next: "", confirm: "" });
 
   const save = () => {
-    if (!form.name.trim() || !form.email.trim()) {
-      toast.error("Name and email are required.");
+    if (!form.name.trim()) {
+      toast.error("Name is required.");
       return;
     }
-    updateProfile({ ...form, initials: form.name.split(" ").map((n) => n[0]).join("").slice(0, 2) });
+    updateProfile({ 
+      ...profile, 
+      name: form.name, 
+      initials: form.name.split(" ").map((n) => n[0]).join("").slice(0, 2) 
+    });
     toast.success("Profile updated");
   };
 
@@ -111,20 +115,20 @@ function ProfilePage() {
                 <Input
                   id="p-email"
                   type="email"
-                  value={form.email}
-                  onChange={(e) => setForm({ ...form, email: e.target.value })}
+                  value={profile.email || ""}
+                  disabled
                 />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="p-phone">Phone</Label>
-                <Input id="p-phone" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+                <Input id="p-phone" value={profile.phone || ""} disabled />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="p-loc">Location</Label>
                 <Input
                   id="p-loc"
-                  value={form.location}
-                  onChange={(e) => setForm({ ...form, location: e.target.value })}
+                  value={profile.location || ""}
+                  disabled
                 />
               </div>
             </div>
@@ -165,19 +169,6 @@ function ProfilePage() {
             </div>
             
             <div className="mt-4 flex flex-wrap justify-end gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setForm({
-                    name: profile.name,
-                    email: profile.email,
-                    phone: profile.phone,
-                    location: profile.location,
-                  })
-                }
-              >
-                Reset
-              </Button>
               <Button onClick={() => { save(); if (pw.next) changePassword(); }}>
                 <KeyRound className="size-4" /> Save all changes
               </Button>
