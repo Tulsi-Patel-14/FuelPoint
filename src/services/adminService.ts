@@ -53,6 +53,83 @@ export interface PaginatedWorkers {
   pagination: Pagination;
 }
 
+export interface CustomerSummaryResponse {
+  totalCustomers: number;
+  newRegistrations7d: number;
+  activeCustomers: number;
+  usedPumpCustomers: number;
+}
+
+export interface WorkerSummaryResponse {
+  totalWorkers: number;
+  activeWorkers: number;
+  totalScans: number;
+  discountProcessed: number;
+}
+
+export interface GroupSummaryResponse {
+  totalGroups: number;
+  activeGroups: number;
+  groupedCustomers: number;
+  discountGenerated: number;
+}
+
+export interface ReportSummaryResponse {
+  dateRange: { start: string; end: string };
+  transactions: {
+    transactions: number;
+    revenue: number;
+    litresDispensed: number;
+    avgTicket: number;
+  };
+  discount: {
+    discountGiven: number;
+    effectiveRate: number;
+    discountedScans: number;
+    avgDiscountPerScan: number;
+  };
+  customers: {
+    newRegistrations: number;
+    totalCustomers: number;
+    active: number;
+    unassigned: number;
+  };
+  workers: {
+    workers: number;
+    active: number;
+    scansInRange: number;
+    discountProcessed: number;
+  };
+  groups: {
+    groups: number;
+    activeGroups: number;
+    groupDiscount: number;
+    groupedCustomers: number;
+  };
+  scansInRange: number;
+  registrationsInRange: number;
+}
+
+export interface ReportDataParams {
+  category: string;
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}
+
+export interface ReportDataResponse<T = any> {
+  data: T[];
+  pagination: Pagination;
+}
+
+export interface ExportReportParams {
+  category: string;
+  startDate?: string;
+  endDate?: string;
+  format: 'csv' | 'excel';
+}
+
 export interface DashboardData {
   days: number;
   overview: {
@@ -88,6 +165,39 @@ export interface DashboardData {
   recentTransactions: Transaction[];
 }
 
+export const extractErrorMessage = async (response: Response, defaultMessage: string = "Request failed"): Promise<string> => {
+  try {
+    const text = await response.text();
+    if (text) {
+      try {
+        const json = JSON.parse(text);
+        if (json && typeof json === 'object') {
+          if (typeof json.message === 'string' && json.message.trim()) {
+            return json.message.trim();
+          }
+          if (typeof json.error === 'string' && json.error.trim()) {
+            return json.error.trim();
+          }
+        }
+      } catch {
+        if (text.length < 150 && !text.startsWith('<')) {
+          return text.trim();
+        }
+      }
+    }
+  } catch {
+    // network or stream error
+  }
+
+  if (response.status === 401) return "Invalid email or password.";
+  if (response.status === 403) return "Access denied. Admin privileges required.";
+  if (response.status === 404) return "Requested resource not found.";
+  if (response.status === 429) return "Too many requests. Please try again shortly.";
+  if (response.status >= 500) return "Server error occurred. Please try again later.";
+
+  return defaultMessage;
+};
+
 const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
   const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
   
@@ -103,7 +213,10 @@ const fetchApiRaw = async (endpoint: string, options: RequestInit = {}) => {
     ...options,
     headers,
   });
-  if (!response.ok) throw new Error(`API Error: ${response.status} - ${await response.text()}`);
+  if (!response.ok) {
+    const message = await extractErrorMessage(response, `Request failed (${response.status})`);
+    throw new Error(message);
+  }
   return await response.json();
 };
 
@@ -220,10 +333,52 @@ export const adminService = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password })
     });
-    if (!response.ok) throw new Error(`Login Error: ${response.status} - ${await response.text()}`);
+    if (!response.ok) {
+      const message = await extractErrorMessage(response, "Invalid admin credentials");
+      throw new Error(message);
+    }
     const json = await response.json();
     return json.data;
   },
+  globalSearch: async (q: string): Promise<any[]> => {
+    return await fetchApi(`/search?q=${encodeURIComponent(q)}`);
+  },
+  requestPasswordReset: async (email: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/forgot-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: email.trim() }),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(json.message || `Request failed (${response.status})`);
+    }
+    return json;
+  },
+  resetPassword: async (data: { token: string; password: string; confirmPassword?: string }): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/reset-password`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(json.message || `Reset failed (${response.status})`);
+    }
+    return json;
+  },
+  verifyResetToken: async (token: string): Promise<{ valid: boolean; message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/auth/verify-reset-token?token=${encodeURIComponent(token.trim())}`, {
+      method: 'GET',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok || !json.valid) {
+      throw new Error(json.message || "This password reset link is invalid or has expired.");
+    }
+    return json;
+  },
+  getGroupSummary: async (): Promise<GroupSummaryResponse> => fetchApi('/groups/summary'),
   getGroups: async (): Promise<Group[]> => fetchApi('/groups'),
   getGroupsRaw: async (): Promise<{ success: boolean; data: Group[]; stats?: any }> => fetchApiRaw('/groups'),
   createGroup: async (group: Partial<Group>): Promise<Group> => {
@@ -255,6 +410,7 @@ export const adminService = {
   deleteGroup: async (id: string): Promise<void> => {
     await fetchApi(`/groups/${id}`, { method: 'DELETE' });
   },
+  getCustomerSummary: async (): Promise<CustomerSummaryResponse> => fetchApi('/customers/summary'),
   getCustomers: async (params?: CustomerQueryParams): Promise<Customer[]> => {
     const query = new URLSearchParams();
     if (params?.all) query.set('all', 'true');
@@ -298,6 +454,7 @@ export const adminService = {
     return mapCustomer(raw);
   },
   deleteCustomer: async (id: string): Promise<void> => fetchApi(`/customers/${id}`, { method: 'DELETE' }),
+  getWorkerSummary: async (): Promise<WorkerSummaryResponse> => fetchApi('/workers/summary'),
   getWorkers: async (params?: WorkerQueryParams): Promise<Worker[]> => {
     const query = new URLSearchParams();
     if (params?.all) query.set('all', 'true');
@@ -360,6 +517,80 @@ export const adminService = {
   getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
   getProfile: async () => fetchApi('/profile'),
   getToday: () => new Date(),
+  getReportSummary: async (params?: { startDate?: string; endDate?: string }): Promise<ReportSummaryResponse> => {
+    const query = new URLSearchParams();
+    if (params?.startDate) query.set('startDate', params.startDate);
+    if (params?.endDate) query.set('endDate', params.endDate);
+    const qStr = query.toString() ? `?${query.toString()}` : '';
+    return fetchApi(`/reports/summary${qStr}`);
+  },
+  getReportData: async (params: ReportDataParams): Promise<ReportDataResponse> => {
+    const query = new URLSearchParams();
+    query.set('category', params.category);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    if (params.page) query.set('page', params.page.toString());
+    if (params.limit) query.set('limit', params.limit.toString());
+    const qStr = `?${query.toString()}`;
+    const raw = await fetchApiRaw(`/reports/data${qStr}`);
+    return {
+      data: Array.isArray(raw.data) ? raw.data : [],
+      pagination: raw.pagination || {
+        page: params.page || 1,
+        limit: params.limit || 10,
+        total: (raw.data || []).length,
+        totalPages: 1,
+      },
+    };
+  },
+  exportReport: async (params: ExportReportParams): Promise<void> => {
+    const query = new URLSearchParams();
+    query.set('category', params.category);
+    if (params.startDate) query.set('startDate', params.startDate);
+    if (params.endDate) query.set('endDate', params.endDate);
+    query.set('format', params.format);
+
+    const currentToken = typeof window !== 'undefined' ? (localStorage.getItem('adminToken') || '') : '';
+    const headers: Record<string, string> = {};
+    if (currentToken) {
+      headers['Authorization'] = `Bearer ${currentToken}`;
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reports/export?${query.toString()}`, {
+      headers,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      let msg = 'Nothing to export for this range.';
+      try {
+        const parsed = JSON.parse(errText);
+        if (parsed.message) msg = parsed.message;
+      } catch {
+        // default
+      }
+      throw new Error(msg);
+    }
+
+    const blob = await response.blob();
+    const disposition = response.headers.get('content-disposition');
+    let filename = `${params.category}-report.${params.format === 'csv' ? 'csv' : 'xlsx'}`;
+    if (disposition) {
+      const match = disposition.match(/filename="?([^";]+)"?/);
+      if (match && match[1]) {
+        filename = match[1];
+      }
+    }
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+  },
 };
 
 export { DEFAULT_GROUP_ID };
@@ -549,3 +780,23 @@ export function exportCsv(filename: string, rows: Record<string, string | number
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export interface StationSettings {
+  stationName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
+adminService.getStationSettings = async function(): Promise<StationSettings | null> {
+  const res = await fetchApi('/stations');
+  return res;
+};
+
+adminService.updateStationSettings = async function(data: StationSettings): Promise<StationSettings> {
+  const res = await fetchApi('/stations/default', {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+  return res;
+};

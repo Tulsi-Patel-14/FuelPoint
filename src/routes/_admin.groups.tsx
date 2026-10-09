@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { BadgePercent, Pencil, Plus, Power, Tags, Trash2, Users } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { DonutChart, HorizontalBarChart } from "@/components/admin/charts";
 import { PageHeader, Panel, StatCard } from "@/components/admin/primitives";
@@ -35,14 +35,21 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAdmin } from "@/lib/admin-store";
 import {
+  adminService,
   DEFAULT_GROUP_ID,
   formatCurrency,
   formatDate,
   formatNumber,
+  type GroupSummaryResponse,
 } from "@/services/adminService";
 import type { Group } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/groups")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Groups & Discounts — FuelPoint Admin" },
@@ -64,6 +71,7 @@ export const Route = createFileRoute("/_admin/groups")({
 const blank = { id: "", name: "", discountPercent: 1 as number | string, description: "", active: true };
 
 function GroupsPage() {
+  const searchParams = Route.useSearch();
   const {
     groups,
     customers,
@@ -74,11 +82,29 @@ function GroupsPage() {
   } = useAdmin();
   const [editing, setEditing] = useState<typeof blank | null>(null);
   const [assignTarget, setAssignTarget] = useState<Group | null>(null);
-  const [assignCustomer, setAssignCustomer] = useState("");
+  const [assignCustomers, setAssignCustomers] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState<Group | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<GroupSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getGroupSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load group summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   const totalDiscount = useMemo(
     () => groups.reduce((s, g) => s + (g.discountGenerated ?? 0), 0),
@@ -131,6 +157,7 @@ function GroupsPage() {
       });
       setEditing(null);
       setErrors({});
+      fetchSummary();
     } catch (err: any) {
       toast.error(err.message || "Failed to save group");
     } finally {
@@ -156,22 +183,26 @@ function GroupsPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total groups" value={formatNumber(groups.length)} icon={Tags} />
+        <StatCard
+          label="Total groups"
+          value={formatNumber(summaryData ? summaryData.totalGroups : groups.length)}
+          icon={Tags}
+        />
         <StatCard
           label="Active groups"
-          value={formatNumber(groups.filter((g) => g.active).length)}
+          value={formatNumber(summaryData ? summaryData.activeGroups : groups.filter((g) => g.active).length)}
           icon={Power}
           tone="teal"
         />
         <StatCard
           label="Grouped customers"
-          value={formatNumber(totalGroupedCustomers)}
+          value={formatNumber(summaryData ? summaryData.groupedCustomers : totalGroupedCustomers)}
           icon={Users}
           tone="navy"
         />
         <StatCard
           label="Discount generated"
-          value={formatCurrency(totalDiscount)}
+          value={formatCurrency(summaryData ? summaryData.discountGenerated : totalDiscount)}
           icon={BadgePercent}
           tone="teal"
         />
@@ -237,6 +268,7 @@ function GroupsPage() {
                           try {
                             await toggleGroupActive(group.id);
                             toast.success(`Group ${group.active ? "deactivated" : "activated"}`);
+                            fetchSummary();
                           } catch (err: any) {
                             toast.error(err.message || "Failed to toggle group");
                           }
@@ -363,52 +395,68 @@ function GroupsPage() {
       </Dialog>
 
       {/* Assign customers */}
-      <Dialog open={!!assignTarget} onOpenChange={(o) => !o && setAssignTarget(null)}>
+      <Dialog open={!!assignTarget} onOpenChange={(o) => {
+        if (!o) {
+          setAssignTarget(null);
+          setAssignCustomers([]);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           {assignTarget && (
             <>
               <DialogHeader>
-                <DialogTitle>Assign customer to {assignTarget.name}</DialogTitle>
+                <DialogTitle>Assign customers to {assignTarget.name}</DialogTitle>
                 <DialogDescription>
-                  Unassigned customers are listed first — they are waiting for a group.
+                  Unassigned customers are listed first — they are waiting for a group. Click to select multiple.
                 </DialogDescription>
               </DialogHeader>
-              <Select value={assignCustomer} onValueChange={setAssignCustomer}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a customer" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {[...customers]
-                    .filter((c) => c.groupId !== assignTarget.id)
-                    .sort((a, b) =>
-                      a.groupId === DEFAULT_GROUP_ID ? -1 : b.groupId === DEFAULT_GROUP_ID ? 1 : 0,
-                    )
-                    .slice(0, 60)
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} · {c.phone}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="max-h-72 overflow-y-auto rounded-md border border-border p-2">
+                {[...customers]
+                  .filter((c) => c.groupId !== assignTarget.id)
+                  .sort((a, b) =>
+                    a.groupId === DEFAULT_GROUP_ID ? -1 : b.groupId === DEFAULT_GROUP_ID ? 1 : 0,
+                  )
+                  .map((c) => {
+                    const isSelected = assignCustomers.includes(c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-sm px-3 py-2 text-sm transition-colors hover:bg-muted ${isSelected ? 'bg-primary/10 text-primary font-medium' : ''}`}
+                        onClick={() => {
+                          setAssignCustomers(prev => 
+                            prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                          );
+                        }}
+                      >
+                        <span>{c.name} · {c.phone}</span>
+                        {isSelected && <span className="text-primary text-xs font-bold">✓</span>}
+                      </div>
+                    );
+                  })}
+              </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setAssignTarget(null)}>
+                <Button variant="outline" onClick={() => {
+                  setAssignTarget(null);
+                  setAssignCustomers([]);
+                }}>
                   Cancel
                 </Button>
                 <Button
-                  disabled={!assignCustomer}
+                  disabled={assignCustomers.length === 0}
                   onClick={async () => {
                     try {
-                      await assignCustomerGroup(assignCustomer, assignTarget.id);
-                      toast.success("Customer assigned", { description: assignTarget.name });
-                      setAssignCustomer("");
+                      await Promise.all(
+                        assignCustomers.map(id => assignCustomerGroup(id, assignTarget.id))
+                      );
+                      toast.success(`${assignCustomers.length} customer(s) assigned`, { description: assignTarget.name });
+                      setAssignCustomers([]);
                       setAssignTarget(null);
                     } catch (err: any) {
-                      toast.error("Failed to assign customer", { description: err.message });
+                      toast.error("Failed to assign customers", { description: err.message });
                     }
                   }}
                 >
-                  Assign
+                  Assign {assignCustomers.length > 0 ? `(${assignCustomers.length})` : ''}
                 </Button>
               </DialogFooter>
             </>
@@ -442,6 +490,7 @@ function GroupsPage() {
                       description: `${deletingGroup.name} customers moved to Default / Unassigned.`,
                     });
                     setDeletingGroup(null);
+                    fetchSummary();
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete group");
                   } finally {

@@ -40,11 +40,18 @@ import {
   formatNumber,
   relativeDays,
   adminService,
+  type WorkerSummaryResponse,
   type Pagination,
 } from "@/services/adminService";
 import type { Worker } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/workers")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      q: (search.q as string) || undefined,
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Workers — FuelPoint Admin" },
@@ -63,9 +70,10 @@ export const Route = createFileRoute("/_admin/workers")({
 });
 
 function WorkersPage() {
+  const searchParams = Route.useSearch();
   const { workers, transactions, saveWorker, deleteWorker, getWorkers } = useAdmin();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.q || "");
+  const [debouncedQuery, setDebouncedQuery] = useState(searchParams.q || "");
   const [status, setStatus] = useState("all");
   const [shift, setShift] = useState("all");
   const [sortConfig, setSortConfig] = useState<{ key: string; dir: "asc" | "desc" } | null>({
@@ -82,7 +90,18 @@ function WorkersPage() {
     totalPages: 1,
   });
   const [isLoading, setIsLoading] = useState(false);
+  
+  // Create selected state holding ID rather than object so it automatically maps, just like Customers.
+  // Wait, workers page uses `selected` holding the entire Worker object!
+  // To handle highlight, let's look up the worker from tableWorkers or workers based on searchParams.highlight inside useEffect.
   const [selected, setSelected] = useState<Worker | null>(null);
+
+  useEffect(() => {
+    if (searchParams.highlight) {
+      const match = tableWorkers.find(w => w.id === searchParams.highlight) || workers.find(w => w.id === searchParams.highlight);
+      if (match) setSelected(match);
+    }
+  }, [searchParams.highlight, tableWorkers, workers]);
   
   const [editingWorker, setEditingWorker] = useState<Worker | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -91,6 +110,24 @@ function WorkersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingWorker, setDeletingWorker] = useState<Worker | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<WorkerSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getWorkerSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load worker summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   // Debounce search query with 3 seconds delay
   useEffect(() => {
@@ -278,16 +315,14 @@ function WorkersPage() {
       newErrors.phone = "Phone number must be exactly 10 digits.";
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!editingWorker.email.trim()) {
-      newErrors.email = "Email is required.";
-    } else if (!emailRegex.test(editingWorker.email.trim())) {
-      newErrors.email = "Enter a valid email address.";
+    if (workers.some(w => w.phone === editingWorker.phone && w.id !== editingWorker.id)) {
+      newErrors.phone = "Mobile number is already registered.";
     }
 
-    if (!editingWorker.id) {
-      if (!editingWorker.password) {
-        newErrors.password = "Password is required.";
+    if (editingWorker.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editingWorker.email.trim())) {
+        newErrors.email = "Enter a valid email address.";
       }
     }
 
@@ -338,22 +373,26 @@ function WorkersPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total workers" value={formatNumber(augmentedWorkers.length)} icon={Wrench} />
+        <StatCard
+          label="Total workers"
+          value={formatNumber(summaryData ? summaryData.totalWorkers : augmentedWorkers.length)}
+          icon={Wrench}
+        />
         <StatCard
           label="Active workers"
-          value={formatNumber(totals.active)}
+          value={formatNumber(summaryData ? summaryData.activeWorkers : totals.active)}
           icon={UserCheck}
           tone="teal"
         />
         <StatCard
           label="Total scans"
-          value={formatNumber(totals.scans)}
+          value={formatNumber(summaryData ? summaryData.totalScans : totals.scans)}
           icon={Activity}
           tone="navy"
         />
         <StatCard
           label="Discount processed"
-          value={formatCurrency(totals.discount)}
+          value={formatCurrency(summaryData ? summaryData.discountProcessed : totals.discount)}
           icon={BadgePercent}
           tone="teal"
         />
@@ -381,7 +420,7 @@ function WorkersPage() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="offline">Offline</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
             </SelectContent>
           </Select>
@@ -553,7 +592,7 @@ function WorkersPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="w-email">Email <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="w-email">Email</Label>
                   <Input
                     id="w-email"
                     type="email"
@@ -571,7 +610,6 @@ function WorkersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="w-password">
                       {editingWorker.id ? "New Password" : "Password"}
-                      {!editingWorker.id && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="w-password"
@@ -589,7 +627,6 @@ function WorkersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="w-confirm-password">
                       Confirm Password 
-                      {(!editingWorker.id || editingWorker.password) && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="w-confirm-password"
@@ -636,7 +673,7 @@ function WorkersPage() {
                       <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
                         <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
@@ -667,7 +704,7 @@ function WorkersPage() {
                       }
                       
                       await saveWorker(workerToSave);
-                      await fetchTableWorkers();
+                      await Promise.all([fetchTableWorkers(), fetchSummary()]);
                       if (getWorkers) getWorkers({ all: true }).catch(() => {});
                       toast.success(editingWorker.id ? "Worker updated successfully" : "Worker created successfully");
                       setEditingWorker(null);
@@ -709,7 +746,7 @@ function WorkersPage() {
                   setIsDeleting(true);
                   try {
                     await deleteWorker(deletingWorker.id);
-                    await fetchTableWorkers();
+                    await Promise.all([fetchTableWorkers(), fetchSummary()]);
                     if (getWorkers) getWorkers({ all: true }).catch(() => {});
                     toast.success("Worker deleted successfully");
                     setDeletingWorker(null);

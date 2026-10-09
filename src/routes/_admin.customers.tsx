@@ -42,11 +42,18 @@ import {
   formatDateTime,
   formatNumber,
   relativeDays,
+  type CustomerSummaryResponse,
   type Pagination,
 } from "@/services/adminService";
 import type { Customer } from "@/services/types";
 
 export const Route = createFileRoute("/_admin/customers")({
+  validateSearch: (search: Record<string, unknown>) => {
+    return {
+      q: (search.q as string) || undefined,
+      highlight: (search.highlight as string) || undefined,
+    };
+  },
   head: () => ({
     meta: [
       { title: "Customers — FuelPoint Admin" },
@@ -66,9 +73,10 @@ export const Route = createFileRoute("/_admin/customers")({
 });
 
 function CustomersPage() {
+  const searchParams = Route.useSearch();
   const { customers, groups, transactions, workers, saveCustomer, deleteCustomer, getCustomers } = useAdmin();
-  const [query, setQuery] = useState("");
-  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [query, setQuery] = useState(searchParams.q || "");
+  const [debouncedQuery, setDebouncedQuery] = useState(searchParams.q || "");
   const [groupFilter, setGroupFilter] = useState("all");
   const [statusFilter, setStatusFilter] = useState("all");
   const [page, setPage] = useState(1);
@@ -81,7 +89,7 @@ function CustomersPage() {
     totalPages: 1,
   });
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(searchParams.highlight || null);
   
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -90,6 +98,24 @@ function CustomersPage() {
   const [isSaving, setIsSaving] = useState(false);
   const [deletingCustomer, setDeletingCustomer] = useState<Customer | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [summaryData, setSummaryData] = useState<CustomerSummaryResponse | null>(null);
+  const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+
+  const fetchSummary = useCallback(async () => {
+    setIsLoadingSummary(true);
+    try {
+      const data = await adminService.getCustomerSummary();
+      setSummaryData(data);
+    } catch (err: any) {
+      console.error("Failed to load customer summary", err);
+    } finally {
+      setIsLoadingSummary(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchSummary();
+  }, [fetchSummary]);
 
   // Debounce search query (3 seconds)
   useEffect(() => {
@@ -236,18 +262,14 @@ function CustomersPage() {
       newErrors.phone = "Phone number is required.";
     } else if (editingCustomer.phone.length !== 10) {
       newErrors.phone = "Phone number must be exactly 10 digits.";
+    } else if (customers.some(c => c.phone === editingCustomer.phone && c.id !== editingCustomer.id)) {
+      newErrors.phone = "Mobile number is already registered.";
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!editingCustomer.email.trim()) {
-      newErrors.email = "Email is required.";
-    } else if (!emailRegex.test(editingCustomer.email.trim())) {
-      newErrors.email = "Enter a valid email address.";
-    }
-
-    if (!editingCustomer.id) {
-      if (!editingCustomer.password) {
-        newErrors.password = "Password is required.";
+    if (editingCustomer.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editingCustomer.email.trim())) {
+        newErrors.email = "Enter a valid email address.";
       }
     }
 
@@ -306,13 +328,14 @@ function CustomersPage() {
               onClick={() => {
                 setErrors({});
                 setConfirmPassword("");
+                const standardGroup = groups.find(g => g.name.toLowerCase().includes('standard') || g.isDefault)?.id || DEFAULT_GROUP_ID;
                 setEditingCustomer({
                   id: "",
                   name: "",
                   phone: "",
                   email: "",
                   vehicle: "",
-                  groupId: DEFAULT_GROUP_ID,
+                  groupId: standardGroup,
                   status: "active",
                   registeredAt: new Date().toISOString(),
                   lastActivity: null,
@@ -330,23 +353,27 @@ function CustomersPage() {
       />
 
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total customers" value={formatNumber(overview.totalCustomers)} icon={Users} />
+        <StatCard
+          label="Total customers"
+          value={formatNumber(summaryData ? summaryData.totalCustomers : overview.totalCustomers)}
+          icon={Users}
+        />
         <StatCard
           label="New registrations"
-          value={formatNumber(overview.newRegistrations7d)}
+          value={formatNumber(summaryData ? summaryData.newRegistrations7d : overview.newRegistrations7d)}
           icon={UserPlus}
           tone="warning"
           hint="last 7 days"
         />
         <StatCard
           label="Active customers"
-          value={formatNumber(overview.activeCustomers)}
+          value={formatNumber(summaryData ? summaryData.activeCustomers : overview.activeCustomers)}
           icon={UserCheck}
           tone="teal"
         />
         <StatCard
           label="Used the pump"
-          value={formatNumber(overview.usedPumpCustomers)}
+          value={formatNumber(summaryData ? summaryData.usedPumpCustomers : overview.usedPumpCustomers)}
           icon={Fuel}
           tone="navy"
           hint="last 30 days"
@@ -565,7 +592,7 @@ function CustomersPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="c-email">Email <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="c-email">Email</Label>
                     <Input
                       id="c-email"
                       type="email"
@@ -593,7 +620,6 @@ function CustomersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="c-password">
                       {editingCustomer.id ? "New Password" : "Password"}
-                      {!editingCustomer.id && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="c-password"
@@ -611,7 +637,6 @@ function CustomersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="c-confirm-password">
                       Confirm Password 
-                      {(!editingCustomer.id || editingCustomer.password) && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="c-confirm-password"
@@ -644,7 +669,6 @@ function CustomersPage() {
                             {g.name}
                           </SelectItem>
                         ))}
-                        <SelectItem value={DEFAULT_GROUP_ID}>Unassigned</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.groupId && <p className="mt-1 text-xs text-destructive">{errors.groupId}</p>}
@@ -661,10 +685,7 @@ function CustomersPage() {
                       <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.status && <p className="mt-1 text-xs text-destructive">{errors.status}</p>}
@@ -699,7 +720,7 @@ function CustomersPage() {
                       setConfirmPassword("");
                       setErrors({});
                       if (getCustomers) await getCustomers({ all: true });
-                      await fetchTableCustomers();
+                      await Promise.all([fetchTableCustomers(), fetchSummary()]);
                     } catch (err: any) {
                       toast.error(err.message || "Failed to save customer");
                     } finally {
@@ -739,7 +760,7 @@ function CustomersPage() {
                     toast.success("Customer deleted successfully");
                     setDeletingCustomer(null);
                     if (getCustomers) await getCustomers({ all: true });
-                    await fetchTableCustomers();
+                    await Promise.all([fetchTableCustomers(), fetchSummary()]);
                   } catch (err: any) {
                     toast.error(err.message || "Failed to delete customer");
                   } finally {

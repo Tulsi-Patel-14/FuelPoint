@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteImport } from './routes/_admin'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as AdminCustomersRouteImport } from './routes/_admin.customers'
 import { Route as AdminDashboardRouteImport } from './routes/_admin.dashboard'
 import { Route as AdminGroupsRouteImport } from './routes/_admin.groups'
@@ -18,6 +19,7 @@ import { Route as AdminNotificationsRouteImport } from './routes/_admin.notifica
 import { Route as AdminProfileRouteImport } from './routes/_admin.profile'
 import { Route as AdminReportsRouteImport } from './routes/_admin.reports'
 import { Route as AdminSearchRouteImport } from './routes/_admin.search'
+import { Route as AdminSettingsRouteImport } from './routes/_admin.settings'
 import { Route as AdminWorkersRouteImport } from './routes/_admin.workers'
 
 const IndexRoute = IndexRouteImport.update({
@@ -27,6 +29,11 @@ const IndexRoute = IndexRouteImport.update({
 } as any)
 const AdminRoute = AdminRouteImport.update({
   id: '/_admin',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminCustomersRoute = AdminCustomersRouteImport.update({
@@ -64,6 +71,11 @@ const AdminSearchRoute = AdminSearchRouteImport.update({
   path: '/search',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminWorkersRoute = AdminWorkersRouteImport.update({
   id: '/workers',
   path: '/workers',
@@ -72,6 +84,7 @@ const AdminWorkersRoute = AdminWorkersRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/customers': typeof AdminCustomersRoute
   '/dashboard': typeof AdminDashboardRoute
   '/groups': typeof AdminGroupsRoute
@@ -79,10 +92,12 @@ export interface FileRoutesByFullPath {
   '/profile': typeof AdminProfileRoute
   '/reports': typeof AdminReportsRoute
   '/search': typeof AdminSearchRoute
+  '/settings': typeof AdminSettingsRoute
   '/workers': typeof AdminWorkersRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/customers': typeof AdminCustomersRoute
   '/dashboard': typeof AdminDashboardRoute
   '/groups': typeof AdminGroupsRoute
@@ -90,12 +105,14 @@ export interface FileRoutesByTo {
   '/profile': typeof AdminProfileRoute
   '/reports': typeof AdminReportsRoute
   '/search': typeof AdminSearchRoute
+  '/settings': typeof AdminSettingsRoute
   '/workers': typeof AdminWorkersRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_admin': typeof AdminRouteWithChildren
+  '/reset-password': typeof ResetPasswordRoute
   '/_admin/customers': typeof AdminCustomersRoute
   '/_admin/dashboard': typeof AdminDashboardRoute
   '/_admin/groups': typeof AdminGroupsRoute
@@ -103,12 +120,14 @@ export interface FileRoutesById {
   '/_admin/profile': typeof AdminProfileRoute
   '/_admin/reports': typeof AdminReportsRoute
   '/_admin/search': typeof AdminSearchRoute
+  '/_admin/settings': typeof AdminSettingsRoute
   '/_admin/workers': typeof AdminWorkersRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/reset-password'
     | '/customers'
     | '/dashboard'
     | '/groups'
@@ -116,10 +135,12 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/search'
+    | '/settings'
     | '/workers'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/reset-password'
     | '/customers'
     | '/dashboard'
     | '/groups'
@@ -127,11 +148,13 @@ export interface FileRouteTypes {
     | '/profile'
     | '/reports'
     | '/search'
+    | '/settings'
     | '/workers'
   id:
     | '__root__'
     | '/'
     | '/_admin'
+    | '/reset-password'
     | '/_admin/customers'
     | '/_admin/dashboard'
     | '/_admin/groups'
@@ -139,12 +162,14 @@ export interface FileRouteTypes {
     | '/_admin/profile'
     | '/_admin/reports'
     | '/_admin/search'
+    | '/_admin/settings'
     | '/_admin/workers'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRoute: typeof AdminRouteWithChildren
+  ResetPasswordRoute: typeof ResetPasswordRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -161,6 +186,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof AdminRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_admin/customers': {
@@ -212,6 +244,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSearchRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/_admin/settings': {
+      id: '/_admin/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/_admin/workers': {
       id: '/_admin/workers'
       path: '/workers'
@@ -230,6 +269,7 @@ interface AdminRouteChildren {
   AdminProfileRoute: typeof AdminProfileRoute
   AdminReportsRoute: typeof AdminReportsRoute
   AdminSearchRoute: typeof AdminSearchRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
   AdminWorkersRoute: typeof AdminWorkersRoute
 }
 
@@ -241,6 +281,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminProfileRoute: AdminProfileRoute,
   AdminReportsRoute: AdminReportsRoute,
   AdminSearchRoute: AdminSearchRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
   AdminWorkersRoute: AdminWorkersRoute,
 }
 
@@ -249,17 +290,8 @@ const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRoute: AdminRouteWithChildren,
+  ResetPasswordRoute: ResetPasswordRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}
