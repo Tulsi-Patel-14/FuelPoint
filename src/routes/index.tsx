@@ -204,11 +204,7 @@ function LoginPage() {
           <path d="M208 136 L214 126 L218 126 L220 134 L212 136" stroke="white" strokeOpacity="0.45" strokeWidth="1.5" fill="none" strokeLinejoin="round" />
         </svg>
 
-        {/* Bottom trust statement */}
-        <div className="relative z-10 flex items-center gap-2 text-xs font-medium text-white/60">
-          <ShieldCheck className="size-4 shrink-0 text-white/70" />
-          <span>Secure admin workspace • Role-based access</span>
-        </div>
+
       </div>
 
       {/* Form panel */}

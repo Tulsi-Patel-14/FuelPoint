@@ -315,16 +315,14 @@ function WorkersPage() {
       newErrors.phone = "Phone number must be exactly 10 digits.";
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!editingWorker.email.trim()) {
-      newErrors.email = "Email is required.";
-    } else if (!emailRegex.test(editingWorker.email.trim())) {
-      newErrors.email = "Enter a valid email address.";
+    if (workers.some(w => w.phone === editingWorker.phone && w.id !== editingWorker.id)) {
+      newErrors.phone = "Mobile number is already registered.";
     }
 
-    if (!editingWorker.id) {
-      if (!editingWorker.password) {
-        newErrors.password = "Password is required.";
+    if (editingWorker.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editingWorker.email.trim())) {
+        newErrors.email = "Enter a valid email address.";
       }
     }
 
@@ -422,7 +420,7 @@ function WorkersPage() {
             <SelectContent>
               <SelectItem value="all">All statuses</SelectItem>
               <SelectItem value="active">Active</SelectItem>
-              <SelectItem value="offline">Offline</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
               <SelectItem value="suspended">Suspended</SelectItem>
             </SelectContent>
           </Select>
@@ -594,7 +592,7 @@ function WorkersPage() {
                   </div>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="w-email">Email <span className="text-destructive">*</span></Label>
+                  <Label htmlFor="w-email">Email</Label>
                   <Input
                     id="w-email"
                     type="email"
@@ -612,7 +610,6 @@ function WorkersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="w-password">
                       {editingWorker.id ? "New Password" : "Password"}
-                      {!editingWorker.id && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="w-password"
@@ -630,7 +627,6 @@ function WorkersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="w-confirm-password">
                       Confirm Password 
-                      {(!editingWorker.id || editingWorker.password) && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="w-confirm-password"
@@ -677,7 +673,7 @@ function WorkersPage() {
                       <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
                         <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>

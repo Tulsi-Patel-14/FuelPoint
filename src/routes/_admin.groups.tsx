@@ -82,7 +82,7 @@ function GroupsPage() {
   } = useAdmin();
   const [editing, setEditing] = useState<typeof blank | null>(null);
   const [assignTarget, setAssignTarget] = useState<Group | null>(null);
-  const [assignCustomer, setAssignCustomer] = useState("");
+  const [assignCustomers, setAssignCustomers] = useState<string[]>([]);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [deletingGroup, setDeletingGroup] = useState<Group | null>(null);
@@ -395,52 +395,68 @@ function GroupsPage() {
       </Dialog>
 
       {/* Assign customers */}
-      <Dialog open={!!assignTarget} onOpenChange={(o) => !o && setAssignTarget(null)}>
+      <Dialog open={!!assignTarget} onOpenChange={(o) => {
+        if (!o) {
+          setAssignTarget(null);
+          setAssignCustomers([]);
+        }
+      }}>
         <DialogContent className="sm:max-w-md">
           {assignTarget && (
             <>
               <DialogHeader>
-                <DialogTitle>Assign customer to {assignTarget.name}</DialogTitle>
+                <DialogTitle>Assign customers to {assignTarget.name}</DialogTitle>
                 <DialogDescription>
-                  Unassigned customers are listed first — they are waiting for a group.
+                  Unassigned customers are listed first — they are waiting for a group. Click to select multiple.
                 </DialogDescription>
               </DialogHeader>
-              <Select value={assignCustomer} onValueChange={setAssignCustomer}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a customer" />
-                </SelectTrigger>
-                <SelectContent className="max-h-72">
-                  {[...customers]
-                    .filter((c) => c.groupId !== assignTarget.id)
-                    .sort((a, b) =>
-                      a.groupId === DEFAULT_GROUP_ID ? -1 : b.groupId === DEFAULT_GROUP_ID ? 1 : 0,
-                    )
-                    .slice(0, 60)
-                    .map((c) => (
-                      <SelectItem key={c.id} value={c.id}>
-                        {c.name} · {c.phone}
-                      </SelectItem>
-                    ))}
-                </SelectContent>
-              </Select>
+              <div className="max-h-72 overflow-y-auto rounded-md border border-border p-2">
+                {[...customers]
+                  .filter((c) => c.groupId !== assignTarget.id)
+                  .sort((a, b) =>
+                    a.groupId === DEFAULT_GROUP_ID ? -1 : b.groupId === DEFAULT_GROUP_ID ? 1 : 0,
+                  )
+                  .map((c) => {
+                    const isSelected = assignCustomers.includes(c.id);
+                    return (
+                      <div
+                        key={c.id}
+                        className={`flex cursor-pointer items-center justify-between rounded-sm px-3 py-2 text-sm transition-colors hover:bg-muted ${isSelected ? 'bg-primary/10 text-primary font-medium' : ''}`}
+                        onClick={() => {
+                          setAssignCustomers(prev => 
+                            prev.includes(c.id) ? prev.filter(id => id !== c.id) : [...prev, c.id]
+                          );
+                        }}
+                      >
+                        <span>{c.name} · {c.phone}</span>
+                        {isSelected && <span className="text-primary text-xs font-bold">✓</span>}
+                      </div>
+                    );
+                  })}
+              </div>
               <DialogFooter>
-                <Button variant="outline" onClick={() => setAssignTarget(null)}>
+                <Button variant="outline" onClick={() => {
+                  setAssignTarget(null);
+                  setAssignCustomers([]);
+                }}>
                   Cancel
                 </Button>
                 <Button
-                  disabled={!assignCustomer}
+                  disabled={assignCustomers.length === 0}
                   onClick={async () => {
                     try {
-                      await assignCustomerGroup(assignCustomer, assignTarget.id);
-                      toast.success("Customer assigned", { description: assignTarget.name });
-                      setAssignCustomer("");
+                      await Promise.all(
+                        assignCustomers.map(id => assignCustomerGroup(id, assignTarget.id))
+                      );
+                      toast.success(`${assignCustomers.length} customer(s) assigned`, { description: assignTarget.name });
+                      setAssignCustomers([]);
                       setAssignTarget(null);
                     } catch (err: any) {
-                      toast.error("Failed to assign customer", { description: err.message });
+                      toast.error("Failed to assign customers", { description: err.message });
                     }
                   }}
                 >
-                  Assign
+                  Assign {assignCustomers.length > 0 ? `(${assignCustomers.length})` : ''}
                 </Button>
               </DialogFooter>
             </>

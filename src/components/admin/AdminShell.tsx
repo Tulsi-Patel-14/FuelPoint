@@ -19,6 +19,7 @@ import {
   Users,
   Wrench,
   FileBarChart,
+  Settings,
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
@@ -178,7 +179,20 @@ export function AdminShell({ children }: { children: ReactNode }) {
           ))}
         </nav>
 
-        <div className="mt-auto p-3">
+        <div className="mt-auto p-3 flex flex-col gap-1">
+          <Link
+            to="/settings"
+            onClick={() => setOpen(false)}
+            className={cn(
+              "group relative flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/80 transition-colors hover:bg-sidebar-accent hover:text-sidebar-accent-foreground data-[status=active]:bg-sidebar-primary data-[status=active]:text-sidebar-primary-foreground outline-none",
+              isCollapsed ? "justify-center px-0" : "gap-3 px-3"
+            )}
+            title={isCollapsed ? "Settings" : undefined}
+          >
+            <Settings className="size-[18px] shrink-0" />
+            {!isCollapsed && <span className="truncate">Settings</span>}
+          </Link>
+          <div className="my-1 h-px w-full bg-border" />
           <button
             onClick={handleLogout}
             className={cn(

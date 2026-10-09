@@ -405,7 +405,6 @@ function ReportsPage() {
                 { key: "date", header: "Date", sortValue: (t) => t.createdAt, render: (t) => <span className="text-muted-foreground">{formatDateTime(t.createdAt)}</span> },
                 { key: "customer", header: "Customer", sortValue: (t) => t.customerName, render: (t) => <span className="font-medium">{t.customerName}</span> },
                 { key: "worker", header: "Worker", sortValue: (t) => t.workerName, render: (t) => t.workerName },
-                { key: "fuel", header: "Fuel", sortValue: (t) => t.litres, render: (t) => <span className="text-muted-foreground">{t.fuel} • {t.litres} L</span> },
                 { key: "amount", header: "Amount", sortValue: (t) => t.amount, render: (t) => <span className="font-medium">{formatCurrency(t.amount)}</span> },
                 { key: "discount", header: "Discount", sortValue: (t) => t.discountAmount, render: (t) => <span className="font-medium text-teal">-{formatCurrency(t.discountAmount)} ({t.discountPercent}%)</span> },
               ]}

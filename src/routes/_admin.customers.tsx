@@ -262,18 +262,14 @@ function CustomersPage() {
       newErrors.phone = "Phone number is required.";
     } else if (editingCustomer.phone.length !== 10) {
       newErrors.phone = "Phone number must be exactly 10 digits.";
+    } else if (customers.some(c => c.phone === editingCustomer.phone && c.id !== editingCustomer.id)) {
+      newErrors.phone = "Mobile number is already registered.";
     }
 
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!editingCustomer.email.trim()) {
-      newErrors.email = "Email is required.";
-    } else if (!emailRegex.test(editingCustomer.email.trim())) {
-      newErrors.email = "Enter a valid email address.";
-    }
-
-    if (!editingCustomer.id) {
-      if (!editingCustomer.password) {
-        newErrors.password = "Password is required.";
+    if (editingCustomer.email.trim()) {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(editingCustomer.email.trim())) {
+        newErrors.email = "Enter a valid email address.";
       }
     }
 
@@ -332,13 +328,14 @@ function CustomersPage() {
               onClick={() => {
                 setErrors({});
                 setConfirmPassword("");
+                const standardGroup = groups.find(g => g.name.toLowerCase().includes('standard') || g.isDefault)?.id || DEFAULT_GROUP_ID;
                 setEditingCustomer({
                   id: "",
                   name: "",
                   phone: "",
                   email: "",
                   vehicle: "",
-                  groupId: DEFAULT_GROUP_ID,
+                  groupId: standardGroup,
                   status: "active",
                   registeredAt: new Date().toISOString(),
                   lastActivity: null,
@@ -595,7 +592,7 @@ function CustomersPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label htmlFor="c-email">Email <span className="text-destructive">*</span></Label>
+                    <Label htmlFor="c-email">Email</Label>
                     <Input
                       id="c-email"
                       type="email"
@@ -623,7 +620,6 @@ function CustomersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="c-password">
                       {editingCustomer.id ? "New Password" : "Password"}
-                      {!editingCustomer.id && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="c-password"
@@ -641,7 +637,6 @@ function CustomersPage() {
                   <div className="space-y-2">
                     <Label htmlFor="c-confirm-password">
                       Confirm Password 
-                      {(!editingCustomer.id || editingCustomer.password) && <span className="text-destructive"> *</span>}
                     </Label>
                     <Input
                       id="c-confirm-password"
@@ -674,7 +669,6 @@ function CustomersPage() {
                             {g.name}
                           </SelectItem>
                         ))}
-                        <SelectItem value={DEFAULT_GROUP_ID}>Unassigned</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.groupId && <p className="mt-1 text-xs text-destructive">{errors.groupId}</p>}
@@ -691,10 +685,7 @@ function CustomersPage() {
                       <SelectTrigger className={errors.status ? "border-destructive" : ""}><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="active">Active</SelectItem>
-                        <SelectItem value="pending">Pending</SelectItem>
                         <SelectItem value="inactive">Inactive</SelectItem>
-                        <SelectItem value="offline">Offline</SelectItem>
-                        <SelectItem value="suspended">Suspended</SelectItem>
                       </SelectContent>
                     </Select>
                     {errors.status && <p className="mt-1 text-xs text-destructive">{errors.status}</p>}

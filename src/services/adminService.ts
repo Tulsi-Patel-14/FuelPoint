@@ -780,3 +780,23 @@ export function exportCsv(filename: string, rows: Record<string, string | number
   a.click();
   URL.revokeObjectURL(url);
 }
+
+export interface StationSettings {
+  stationName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
+adminService.getStationSettings = async function(): Promise<StationSettings | null> {
+  const res = await fetchApi('/stations');
+  return res;
+};
+
+adminService.updateStationSettings = async function(data: StationSettings): Promise<StationSettings> {
+  const res = await fetchApi('/stations/default', {
+    method: 'PUT',
+    body: JSON.stringify(data)
+  });
+  return res;
+};
