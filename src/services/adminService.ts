@@ -130,6 +130,13 @@ export interface ExportReportParams {
   format: 'csv' | 'excel';
 }
 
+export interface StationSettings {
+  stationName: string;
+  latitude: number;
+  longitude: number;
+  radiusMeters: number;
+}
+
 export interface DashboardData {
   days: number;
   overview: {
@@ -515,6 +522,21 @@ export const adminService = {
     };
   },
   getNotifications: async (): Promise<Notification[]> => fetchApi('/notifications'),
+  markNotificationRead: async (id: string): Promise<Notification> => {
+    return fetchApi(`/notifications/${id}/read`, { method: 'PATCH' });
+  },
+  markAllNotificationsRead: async (): Promise<void> => {
+    return fetchApi('/notifications/mark-all-read', { method: 'POST' });
+  },
+  getStationSettings: async (): Promise<StationSettings | null> => {
+    return fetchApi('/stations');
+  },
+  updateStationSettings: async (data: StationSettings): Promise<StationSettings> => {
+    return fetchApi('/stations/default', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
   getProfile: async () => fetchApi('/profile'),
   getToday: () => new Date(),
   getReportSummary: async (params?: { startDate?: string; endDate?: string }): Promise<ReportSummaryResponse> => {
@@ -781,22 +803,3 @@ export function exportCsv(filename: string, rows: Record<string, string | number
   URL.revokeObjectURL(url);
 }
 
-export interface StationSettings {
-  stationName: string;
-  latitude: number;
-  longitude: number;
-  radiusMeters: number;
-}
-
-adminService.getStationSettings = async function(): Promise<StationSettings | null> {
-  const res = await fetchApi('/stations');
-  return res;
-};
-
-adminService.updateStationSettings = async function(data: StationSettings): Promise<StationSettings> {
-  const res = await fetchApi('/stations/default', {
-    method: 'PUT',
-    body: JSON.stringify(data)
-  });
-  return res;
-};

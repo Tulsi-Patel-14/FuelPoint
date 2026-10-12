@@ -57,9 +57,13 @@ function NotificationsPage() {
         actions={
           <Button
             variant="outline"
-            onClick={() => {
-              markAllRead();
-              toast.success("All notifications marked as read");
+            onClick={async () => {
+              try {
+                await markAllRead();
+                toast.success("All notifications marked as read");
+              } catch (err: any) {
+                toast.error(err.message || "Failed to mark all notifications as read");
+              }
             }}
           >
             <CheckCheck className="size-4" /> Mark all read
@@ -129,7 +133,18 @@ function NotificationsPage() {
                     </Button>
                   )}
                   {!n.read && (
-                    <Button size="sm" variant="ghost" onClick={() => markRead(n.id)}>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={async () => {
+                        try {
+                          await markRead(n.id);
+                          toast.success("Notification marked as read");
+                        } catch (err: any) {
+                          toast.error(err.message || "Failed to mark notification as read");
+                        }
+                      }}
+                    >
                       Mark read
                     </Button>
                   )}

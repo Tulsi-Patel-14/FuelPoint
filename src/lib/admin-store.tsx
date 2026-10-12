@@ -327,8 +327,6 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     groups,
     transactions,
     notifications,
-    // @ts-ignore
-    _debug: console.log("NOTIFICATIONS VALUE:", notifications),
     unreadCount: Array.isArray(notifications) ? notifications.filter((n) => !n?.read).length : 0,
     assignCustomerGroup,
     saveGroup,
@@ -340,6 +338,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
       } catch (err) {
         console.error("Failed to mark notification read", err);
+        throw err;
       }
     },
     markAllRead: async () => {
@@ -348,6 +347,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
         setNotifications((prev) => prev.map((n) => ({ ...n, read: true })));
       } catch (err) {
         console.error("Failed to mark all notifications read", err);
+        throw err;
       }
     },
     saveCustomer,

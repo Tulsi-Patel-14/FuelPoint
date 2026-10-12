@@ -23,6 +23,7 @@ import {
   X,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { toast } from "sonner";
 import { useAdmin } from "@/lib/admin-store";
 import { cn } from "@/lib/utils";
 import {
@@ -316,9 +317,14 @@ export function AdminShell({ children }: { children: ReactNode }) {
                       <div className="flex flex-col gap-2 items-end shrink-0">
                         {!n.read && (
                           <button
-                            onClick={(e) => {
+                            onClick={async (e) => {
                               e.stopPropagation();
-                              markRead(n.id);
+                              try {
+                                await markRead(n.id);
+                                toast.success("Notification marked as read");
+                              } catch (err: any) {
+                                toast.error(err.message || "Failed to mark notification as read");
+                              }
                             }}
                             className="text-[10px] font-medium text-primary hover:underline cursor-pointer"
                           >
